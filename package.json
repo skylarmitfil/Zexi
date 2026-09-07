@@ -1,5 +1,5 @@
 {
-  "name": "Zexi",
+  "name": "zexi",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
@@ -8,6 +8,7 @@
   "dependencies": {
     "discord.js": "^14.14.1",
     "dotenv": "^16.4.5",
+    "mongoose": "^8.2.0",
     "ws": "^8.16.0"
   }
 }

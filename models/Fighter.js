@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const fighterSchema = new mongoose.Schema({
   userId: { type: String, required: true, unique: true },
   name: { type: String, required: true },
+  fightingStyle: { type: String, required: true },
   level: { type: Number, default: 1 },
   xp: { type: Number, default: 0 },
   statPoints: { type: Number, default: 0 },

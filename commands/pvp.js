@@ -1,47 +1,58 @@
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } = require('discord.js');
 const Fighter = require('../models/Fighter');
 
 module.exports = {
   name: 'pvp',
-  description: 'Challenge another user to a PvP fight in Discord',
+  description: 'Level-based PvP with custom avatars and unlockable moves',
   async execute(message, args) {
     const opponent = message.mentions.users.first();
-
     if (!opponent || opponent.bot || opponent.id === message.author.id) {
-      return message.channel.send('Please mention a valid user to challenge! Example: `.pvp @user`');
+      return message.channel.send('Mention a valid user to challenge!');
     }
 
-    let p1 = await Fighter.findOne({ userId: message.author.id });
-    if (!p1) p1 = await Fighter.create({ userId: message.author.id, name: message.author.username });
-
-    let p2 = await Fighter.findOne({ userId: opponent.id });
-    if (!p2) p2 = await Fighter.create({ userId: opponent.id, name: opponent.username });
+    let f1 = await Fighter.findOne({ userId: message.author.id }) || await Fighter.create({ userId: message.author.id, name: message.author.username });
+    let f2 = await Fighter.findOne({ userId: opponent.id }) || await Fighter.create({ userId: opponent.id, name: opponent.username });
 
     let state = {
-      p1: { id: p1.userId, name: p1.name, hp: 100, guarding: false },
-      p2: { id: p2.userId, name: p2.name, hp: 100, guarding: false },
-      turn: p1.userId
+      p1: { id: f1.userId, name: f1.name, hp: f1.maxHp, maxHp: f1.maxHp, atk: f1.attack, def: f1.defense, level: f1.level, img: f1.imageUrl, guarding: false },
+      p2: { id: f2.userId, name: f2.name, hp: f2.maxHp, maxHp: f2.maxHp, atk: f2.attack, def: f2.defense, level: f2.level, img: f2.imageUrl, guarding: false },
+      turn: f1.userId
     };
 
-    const buttons = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('quick').setLabel('Quick Strike').setStyle(ButtonStyle.Danger),
-      new ButtonBuilder().setCustomId('heavy').setLabel('Heavy Attack').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('guard').setLabel('Guard').setStyle(ButtonStyle.Primary)
-    );
+    function buildRow(player) {
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('quick').setLabel('Quick Strike (Lvl 1)').setStyle(ButtonStyle.Primary)
+      );
 
-    const matchMessage = await message.channel.send({
-      content: `⚔️ **PvP MATCH STARTED!**\n**${state.p1.name}** (100 HP) vs **${state.p2.name}** (100 HP)\n\nIt is <@${state.turn}>'s turn!`,
-      components: [buttons]
-    });
+      if (player.level >= 3) {
+        row.addComponents(new ButtonBuilder().setCustomId('heavy').setLabel('Heavy Slam (Lvl 3)').setStyle(ButtonStyle.Danger));
+      }
+      if (player.level >= 5) {
+        row.addComponents(new ButtonBuilder().setCustomId('ultimate').setLabel('Ultimate Burst (Lvl 5)').setStyle(ButtonStyle.Success));
+      }
 
-    const collector = matchMessage.createMessageComponentCollector({
-      componentType: ComponentType.Button,
-      time: 120000 
-    });
+      row.addComponents(new ButtonBuilder().setCustomId('guard').setLabel('Guard').setStyle(ButtonStyle.Secondary));
+      return row;
+    }
 
-    collector.on('collect', async (interaction) => {
-      if (interaction.user.id !== state.turn) {
-        return interaction.reply({ content: 'It is not your turn!', ephemeral: true });
+    const embed = new EmbedBuilder()
+      .setTitle('⚔️ Arena Match Started')
+      .setDescription(`It is <@${state.turn}>'s turn!`)
+      .setThumbnail(state.p1.img)
+      .addFields(
+        { name: `${state.p1.name} (Lvl ${state.p1.level})`, value: `HP: **${state.p1.hp}/${state.p1.maxHp}**`, inline: true },
+        { name: `${state.p2.name} (Lvl ${state.p2.level})`, value: `HP: **${state.p2.hp}/${state.p2.maxHp}**`, inline: true }
+      )
+      .setColor('#E74C3C');
+
+    let activePlayer = state.p1;
+    const msg = await message.channel.send({ embeds: [embed], components: [buildRow(activePlayer)] });
+
+    const collector = msg.createMessageComponentCollector({ componentType: ComponentType.Button, time: 120000 });
+
+    collector.on('collect', async (i) => {
+      if (i.user.id !== state.turn) {
+        return i.reply({ content: 'It is not your turn!', ephemeral: true });
       }
 
       let attacker = state.turn === state.p1.id ? state.p1 : state.p2;
@@ -50,51 +61,71 @@ module.exports = {
 
       attacker.guarding = false;
 
-      if (interaction.customId === 'quick') {
-        let dmg = Math.floor(Math.random() * 6) + 12;
+      if (i.customId === 'quick') {
+        let dmg = Math.max(5, attacker.atk - defender.def + Math.floor(Math.random() * 5));
         if (defender.guarding) dmg = Math.floor(dmg / 2);
         defender.hp -= dmg;
-        actionLog = `💥 **${attacker.name}** used Quick Strike for **${dmg} DMG**!`;
-      } 
-      else if (interaction.customId === 'heavy') {
-        let hit = Math.random() >= 0.4;
-        if (hit) {
-          let dmg = Math.floor(Math.random() * 11) + 22;
+        actionLog = `💥 **${attacker.name}** hit **${defender.name}** for **${dmg} DMG**!`;
+      } else if (i.customId === 'heavy') {
+        if (Math.random() >= 0.35) {
+          let dmg = Math.max(10, Math.floor(attacker.atk * 1.6) - defender.def);
           if (defender.guarding) dmg = Math.floor(dmg / 2);
           defender.hp -= dmg;
-          actionLog = `🔥 **${attacker.name}** landed a HEAVY ATTACK for **${dmg} DMG**!`;
+          actionLog = `🔥 **${attacker.name}** landed a Heavy Slam for **${dmg} DMG**!`;
         } else {
-          actionLog = `💨 **${attacker.name}** swung heavy and **MISSED**!`;
+          actionLog = `💨 **${attacker.name}** tried Heavy Slam and **MISSED**!`;
         }
-      } 
-      else if (interaction.customId === 'guard') {
+      } else if (i.customId === 'ultimate') {
+        let dmg = Math.max(20, Math.floor(attacker.atk * 2.2));
+        defender.hp -= dmg;
+        actionLog = `⚡ **${attacker.name}** unleashed ULTIMATE BURST for **${dmg} UNBLOCKABLE DMG**!`;
+      } else if (i.customId === 'guard') {
         attacker.guarding = true;
-        actionLog = `🛡️ **${attacker.name}** is guarding against the next hit!`;
+        actionLog = `🛡️ **${attacker.name}** is guarding!`;
       }
 
       if (defender.hp <= 0) {
-        await Fighter.updateOne({ userId: attacker.id }, { $inc: { wins: 1 } });
+        collector.stop();
+
+        // Level up & XP system
+        let winnerDoc = await Fighter.findOne({ userId: attacker.id });
+        winnerDoc.wins += 1;
+        winnerDoc.xp += 35;
+
+        let neededXp = winnerDoc.level * 50;
+        let leveledUp = false;
+        if (winnerDoc.xp >= neededXp) {
+          winnerDoc.level += 1;
+          winnerDoc.statPoints += 2;
+          winnerDoc.xp -= neededXp;
+          leveledUp = true;
+        }
+        await winnerDoc.save();
         await Fighter.updateOne({ userId: defender.id }, { $inc: { losses: 1 } });
 
-        collector.stop();
-        return interaction.update({
-          content: `🏆 **${attacker.name}** DEFEATED **${defender.name}**!\n${actionLog}`,
-          components: []
-        });
+        const winEmbed = new EmbedBuilder()
+          .setTitle('🏆 Match Finished!')
+          .setThumbnail(attacker.img)
+          .setDescription(`**${attacker.name}** defeated **${defender.name}**!\n\n${actionLog}\n\n🎉 **${attacker.name}** earned **35 XP**!${leveledUp ? `\n🌟 **LEVEL UP!** Now Level **${winnerDoc.level}** (+2 Stat Points earned!).` : ''}`)
+          .setColor('#2ECC71');
+
+        return i.update({ embeds: [winEmbed], components: [] });
       }
 
       state.turn = defender.id;
+      let nextPlayer = state.turn === state.p1.id ? state.p1 : state.p2;
 
-      await interaction.update({
-        content: `${actionLog}\n\n**${state.p1.name}**: ${Math.max(0, state.p1.hp)} HP | **${state.p2.name}**: ${Math.max(0, state.p2.hp)} HP\nIt is <@${state.turn}>'s turn!`,
-        components: [buttons]
-      });
-    });
+      const updateEmbed = new EmbedBuilder()
+        .setTitle('⚔️ Arena Match in Progress')
+        .setDescription(`${actionLog}\n\nIt is <@${state.turn}>'s turn!`)
+        .setThumbnail(nextPlayer.img)
+        .addFields(
+          { name: `${state.p1.name} (Lvl ${state.p1.level})`, value: `HP: **${Math.max(0, state.p1.hp)}/${state.p1.maxHp}**`, inline: true },
+          { name: `${state.p2.name} (Lvl ${state.p2.level})`, value: `HP: **${Math.max(0, state.p2.hp)}/${state.p2.maxHp}**`, inline: true }
+        )
+        .setColor('#3498DB');
 
-    collector.on('end', (_, reason) => {
-      if (reason === 'time') {
-        matchMessage.edit({ content: 'Match ended due to inactivity.', components: [] });
-      }
+      await i.update({ embeds: [updateEmbed], components: [buildRow(nextPlayer)] });
     });
   }
 };

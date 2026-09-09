@@ -1,4 +1,11 @@
-const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ComponentType } = require('discord.js');
+const { 
+  EmbedBuilder, 
+  ActionRowBuilder, 
+  StringSelectMenuBuilder, 
+  ButtonBuilder, 
+  ButtonStyle, 
+  ComponentType 
+} = require('discord.js');
 const Fighter = require('../models/Fighter');
 
 const DEFAULT_AVATAR = 'https://cdn.discordapp.com/embed/avatars/0.png';
@@ -15,18 +22,17 @@ const STYLES = {
 module.exports = {
   name: 'create',
   aliases: ['start', 'register'],
-  description: 'Select a fighting style to finalize your character creation',
+  description: 'Pick a fighting style and distribute initial stat points to build your character',
   async execute(message, args) {
-    // Check if character already exists
     let fighter = await Fighter.findOne({ userId: message.author.id });
     if (fighter) {
       return message.channel.send(`⚠️ You already have a character! **${fighter.name}** the **${fighter.fightingStyle}**.`);
     }
 
-    // Step 1: Force fighting style selection screen first
+    // STEP 1: Select Fighting Style
     const selectStyleEmbed = new EmbedBuilder()
-      .setTitle('⚔️ Character Creation: Step 1')
-      .setDescription('You must pick a **Fighting Style** to create your character! Choose an archetype from the menu below to initialize your stats.')
+      .setTitle('⚔️ Character Creation: Step 1 (Fighting Style)')
+      .setDescription('Select a **Fighting Style** to establish your base archetype stats.')
       .addFields(
         { name: '⚔️ Berserker', value: '`HP: 110 | ATK: 22 | DEF: 3`', inline: true },
         { name: '🛡️ Guardian', value: '`HP: 140 | ATK: 12 | DEF: 12`', inline: true },
@@ -37,10 +43,10 @@ module.exports = {
       )
       .setColor('#9B59B6');
 
-    const selectMenu = new ActionRowBuilder().addComponents(
+    const selectMenuRow = new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
-        .setCustomId('select_fighting_style')
-        .setPlaceholder('Select a Fighting Style to create character...')
+        .setCustomId('select_style')
+        .setPlaceholder('Choose a Fighting Style...')
         .addOptions([
           { label: 'Berserker', value: 'berserker', description: STYLES.berserker.desc, emoji: '⚔️' },
           { label: 'Guardian', value: 'guardian', description: STYLES.guardian.desc, emoji: '🛡️' },
@@ -51,54 +57,117 @@ module.exports = {
         ])
     );
 
-    const menuMsg = await message.channel.send({ embeds: [selectStyleEmbed], components: [selectMenu] });
+    const mainMsg = await message.channel.send({ embeds: [selectStyleEmbed], components: [selectMenuRow] });
 
-    const collector = menuMsg.createMessageComponentCollector({
+    const styleCollector = mainMsg.createMessageComponentCollector({
       componentType: ComponentType.StringSelect,
       time: 60000
     });
 
-    collector.on('collect', async (i) => {
+    styleCollector.on('collect', async (i) => {
       if (i.user.id !== message.author.id) {
-        return i.reply({ content: 'This selection menu is not for you!', ephemeral: true });
+        return i.reply({ content: 'This menu is not for you!', ephemeral: true });
       }
 
-      const selected = STYLES[i.values[0]];
-      const avatarUrl = message.author.displayAvatarURL({ extension: 'png', size: 256 }) || DEFAULT_AVATAR;
+      styleCollector.stop('selected');
+      const baseStyle = STYLES[i.values[0]];
 
-      // Step 2: Create and save character in DB ONLY after style selection
-      fighter = await Fighter.create({
-        userId: message.author.id,
-        name: message.author.username,
-        fightingStyle: selected.name,
-        hp: selected.hp,
-        maxHp: selected.hp,
-        attack: selected.attack,
-        defense: selected.defense,
-        imageUrl: avatarUrl
+      // STEP 2: Stat Allocation State
+      let unspentPoints = 5;
+      let addedHp = 0;
+      let addedAtk = 0;
+      let addedDef = 0;
+
+      function renderAllocationEmbed() {
+        return new EmbedBuilder()
+          .setTitle(`📊 Character Creation: Step 2 (Stat Points)`)
+          .setDescription(`Selected Style: **${baseStyle.name}**\nYou have **${unspentPoints}** point(s) remaining to distribute.`)
+          .addFields(
+            { name: '❤️ Health (HP)', value: `**${baseStyle.hp + addedHp}** (+${addedHp})`, inline: true },
+            { name: '⚔️ Attack (ATK)', value: `**${baseStyle.attack + addedAtk}** (+${addedAtk})`, inline: true },
+            { name: '🛡️ Defense (DEF)', value: `**${baseStyle.defense + addedDef}** (+${addedDef})`, inline: true }
+          )
+          .setColor('#3498DB');
+      }
+
+      function renderButtons() {
+        return new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId('add_hp').setLabel('+10 HP').setStyle(ButtonStyle.Primary).setDisabled(unspentPoints <= 0),
+          new ButtonBuilder().setCustomId('add_atk').setLabel('+2 ATK').setStyle(ButtonStyle.Danger).setDisabled(unspentPoints <= 0),
+          new ButtonBuilder().setCustomId('add_def').setLabel('+1 DEF').setStyle(ButtonStyle.Secondary).setDisabled(unspentPoints <= 0),
+          new ButtonBuilder().setCustomId('finish').setLabel('Confirm Character').setStyle(ButtonStyle.Success)
+        );
+      }
+
+      await i.update({ embeds: [renderAllocationEmbed()], components: [renderButtons()] });
+
+      const buttonCollector = mainMsg.createMessageComponentCollector({
+        componentType: ComponentType.Button,
+        time: 90000
       });
 
-      const confirmEmbed = new EmbedBuilder()
-        .setTitle('🎉 Character Successfully Created!')
-        .setThumbnail(avatarUrl)
-        .setDescription(`Style chosen: **${fighter.fightingStyle}**!\nYour character **${fighter.name}** has been generated and added to the arena database.`)
-        .addFields(
-          { name: 'Style', value: fighter.fightingStyle, inline: true },
-          { name: 'HP', value: `${fighter.hp}`, inline: true },
-          { name: 'ATK / DEF', value: `${fighter.attack} / ${fighter.defense}`, inline: true }
-        )
-        .setColor('#2ECC71');
+      buttonCollector.on('collect', async (btnInteraction) => {
+        if (btnInteraction.user.id !== message.author.id) {
+          return btnInteraction.reply({ content: 'This allocation panel is not for you!', ephemeral: true });
+        }
 
-      return i.update({ embeds: [confirmEmbed], components: [] });
+        if (btnInteraction.customId === 'add_hp' && unspentPoints > 0) {
+          addedHp += 10;
+          unspentPoints--;
+        } else if (btnInteraction.customId === 'add_atk' && unspentPoints > 0) {
+          addedAtk += 2;
+          unspentPoints--;
+        } else if (btnInteraction.customId === 'add_def' && unspentPoints > 0) {
+          addedDef += 1;
+          unspentPoints--;
+        } else if (btnInteraction.customId === 'finish') {
+          buttonCollector.stop('completed');
+
+          const finalHp = baseStyle.hp + addedHp;
+          const finalAtk = baseStyle.attack + addedAtk;
+          const finalDef = baseStyle.defense + addedDef;
+          const avatarUrl = message.author.displayAvatarURL({ extension: 'png', size: 256 }) || DEFAULT_AVATAR;
+
+          fighter = await Fighter.create({
+            userId: message.author.id,
+            name: message.author.username,
+            fightingStyle: baseStyle.name,
+            hp: finalHp,
+            maxHp: finalHp,
+            attack: finalAtk,
+            defense: finalDef,
+            statPoints: unspentPoints, // Saves remaining unallocated points if confirmed early
+            imageUrl: avatarUrl
+          });
+
+          const finalEmbed = new EmbedBuilder()
+            .setTitle('🎉 Character Fully Initialized!')
+            .setThumbnail(avatarUrl)
+            .setDescription(`**${fighter.name}** the **${fighter.fightingStyle}** has joined the arena!`)
+            .addFields(
+              { name: 'Style', value: fighter.fightingStyle, inline: true },
+              { name: 'HP', value: `${fighter.hp}`, inline: true },
+              { name: 'ATK / DEF', value: `${fighter.attack} / ${fighter.defense}`, inline: true },
+              { name: 'Unspent Points', value: `${fighter.statPoints}`, inline: true }
+            )
+            .setColor('#2ECC71');
+
+          return btnInteraction.update({ embeds: [finalEmbed], components: [] });
+        }
+
+        await btnInteraction.update({ embeds: [renderAllocationEmbed()], components: [renderButtons()] });
+      });
+
+      buttonCollector.on('end', (collected, reason) => {
+        if (reason === 'time') {
+          mainMsg.edit({ content: '⏱️ Stat distribution timed out. Run `.create` again!', embeds: [], components: [] }).catch(() => {});
+        }
+      });
     });
 
-    collector.on('end', (collected, reason) => {
-      if (reason === 'time' && collected.size === 0) {
-        menuMsg.edit({ 
-          content: '⏱️ Character creation canceled (timed out without picking a fighting style). Run `.create` again when ready!', 
-          embeds: [], 
-          components: [] 
-        }).catch(() => {});
+    styleCollector.on('end', (collected, reason) => {
+      if (reason === 'time') {
+        mainMsg.edit({ content: '⏱️ Character creation timed out without choosing a style.', embeds: [], components: [] }).catch(() => {});
       }
     });
   }

@@ -14,7 +14,7 @@ const client = new Client({
   ]
 });
 
-const DEFAULT_PREFIX = '.';
+const DEFAULT_PREFIX = ',';
 
 client.on(Events.MessageCreate, async (message) => {
   if (message.author.bot || !message.content) return;

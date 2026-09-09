@@ -1,7 +1,7 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } = require('discord.js');
 const Fighter = require('../models/Fighter');
 
-const RESET_COST = 200; // Price in coins to reset stats
+const RESET_COST = 1000; // Price in coins to reset stats
 
 // Base archetype stats reference
 const BASE_STYLES = {

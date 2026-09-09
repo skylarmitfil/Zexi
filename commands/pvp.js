@@ -16,13 +16,13 @@ module.exports = {
     // Check if player 1 has created a character
     let f1 = await Fighter.findOne({ userId: message.author.id });
     if (!f1) {
-      return message.channel.send('⚠️ You must create a character first! Type `.create` to pick your fighting style.');
+      return message.channel.send('⚠️ You must create a character first! Type `,create` to pick your fighting style.');
     }
 
     // Check if player 2 has created a character
     let f2 = await Fighter.findOne({ userId: opponent.id });
     if (!f2) {
-      return message.channel.send(`⚠️ **${opponent.username}** has not created a character yet! They need to type \`.create\` first.`);
+      return message.channel.send(`⚠️ **${opponent.username}** has not created a character yet! They need to type \`,create\` first.`);
     }
 
     const p1MaxHp = f1.maxHp || f1.hp || 100;
@@ -73,7 +73,7 @@ module.exports = {
     }
 
     const embed = new EmbedBuilder()
-      .setTitle('⚔️ Arena Match Started')
+      .setTitle('⚔️ Battle has began')
       .setDescription(`It is <@${state.turn}>'s turn!`)
       .setThumbnail(state.p1.img)
       .addFields(
@@ -108,17 +108,17 @@ module.exports = {
           let dmg = Math.max(10, Math.floor(attacker.atk * 1.6) - defender.def);
           if (defender.guarding) dmg = Math.floor(dmg / 2);
           defender.hp -= dmg;
-          actionLog = `🔥 **${attacker.name}** landed a Heavy Slam for **${dmg} DMG**!`;
+          actionLog = `**${attacker.name}** landed a Heavy Slam for **${dmg} DMG**!`;
         } else {
-          actionLog = `💨 **${attacker.name}** tried Heavy Slam and **MISSED**!`;
+          actionLog = `**${attacker.name}** has **MISSED**!`;
         }
       } else if (i.customId === 'ultimate') {
         let dmg = Math.max(20, Math.floor(attacker.atk * 2.2));
         defender.hp -= dmg;
-        actionLog = `⚡ **${attacker.name}** unleashed ULTIMATE BURST for **${dmg} UNBLOCKABLE DMG**!`;
+        actionLog = `**${attacker.name}** unleashed ULTIMATE BURST for **${dmg} UNBLOCKABLE DMG**!`;
       } else if (i.customId === 'guard') {
         attacker.guarding = true;
-        actionLog = `🛡️ **${attacker.name}** is guarding!`;
+        actionLog = `**${attacker.name}** is guarding!`;
       }
 
       // Victory Condition
@@ -147,7 +147,7 @@ module.exports = {
         await Fighter.updateOne({ userId: defender.id }, { $inc: { losses: 1 } });
 
         const winEmbed = new EmbedBuilder()
-          .setTitle('🏆 Match Finished!')
+          .setTitle('🏆 Battle Over!')
           .setThumbnail(attacker.img)
           .setDescription(
             `**${attacker.name}** defeated **${defender.name}**!\n\n` +
@@ -166,7 +166,7 @@ module.exports = {
       let nextPlayer = state.turn === state.p1.id ? state.p1 : state.p2;
 
       const updateEmbed = new EmbedBuilder()
-        .setTitle('⚔️ Arena Match in Progress')
+        .setTitle('⚔️ Battle in progress')
         .setDescription(`${actionLog}\n\nIt is <@${state.turn}>'s turn!`)
         .setThumbnail(nextPlayer.img)
         .addFields(

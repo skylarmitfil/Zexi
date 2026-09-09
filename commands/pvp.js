@@ -5,7 +5,7 @@ const BASE_REWARD = 100;
 const DEFAULT_AVATAR = 'https://i.imgur.com/8Q9Z5b3.png';
 
 module.exports = {
-  name: 'pvp',
+  name: 'battle',
   description: 'Level-based PvP with style stats, unlockable moves, and coin rewards',
   async execute(message, args) {
     const opponent = message.mentions.users.first();

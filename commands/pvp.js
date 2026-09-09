@@ -6,30 +6,33 @@ const DEFAULT_AVATAR = 'https://i.imgur.com/8Q9Z5b3.png';
 
 module.exports = {
   name: 'pvp',
-  description: 'Level-based PvP with custom avatars, unlockable moves, and coin rewards',
+  description: 'Level-based PvP with style stats, unlockable moves, and coin rewards',
   async execute(message, args) {
     const opponent = message.mentions.users.first();
     if (!opponent || opponent.bot || opponent.id === message.author.id) {
       return message.channel.send('Mention a valid user to challenge!');
     }
 
+    // Check if player 1 has created a character
     let f1 = await Fighter.findOne({ userId: message.author.id });
     if (!f1) {
-      f1 = await Fighter.create({ userId: message.author.id, name: message.author.username });
+      return message.channel.send('⚠️ You must create a character first! Type `.create` to pick your fighting style.');
     }
 
+    // Check if player 2 has created a character
     let f2 = await Fighter.findOne({ userId: opponent.id });
     if (!f2) {
-      f2 = await Fighter.create({ userId: opponent.id, name: opponent.username });
+      return message.channel.send(`⚠️ **${opponent.username}** has not created a character yet! They need to type \`.create\` first.`);
     }
 
-    const p1MaxHp = f1.maxHp || 100;
-    const p2MaxHp = f2.maxHp || 100;
+    const p1MaxHp = f1.maxHp || f1.hp || 100;
+    const p2MaxHp = f2.maxHp || f2.hp || 100;
 
     let state = {
       p1: { 
         id: f1.userId, 
         name: f1.name, 
+        style: f1.fightingStyle || 'Fighter',
         hp: f1.hp || p1MaxHp, 
         maxHp: p1MaxHp, 
         atk: f1.attack || 15, 
@@ -41,6 +44,7 @@ module.exports = {
       p2: { 
         id: f2.userId, 
         name: f2.name, 
+        style: f2.fightingStyle || 'Fighter',
         hp: f2.hp || p2MaxHp, 
         maxHp: p2MaxHp, 
         atk: f2.attack || 15, 
@@ -73,8 +77,8 @@ module.exports = {
       .setDescription(`It is <@${state.turn}>'s turn!`)
       .setThumbnail(state.p1.img)
       .addFields(
-        { name: `${state.p1.name} (Lvl ${state.p1.level})`, value: `HP: **${state.p1.hp}/${state.p1.maxHp}**`, inline: true },
-        { name: `${state.p2.name} (Lvl ${state.p2.level})`, value: `HP: **${state.p2.hp}/${state.p2.maxHp}**`, inline: true }
+        { name: `${state.p1.name} (${state.p1.style} - Lvl ${state.p1.level})`, value: `HP: **${state.p1.hp}/${state.p1.maxHp}**`, inline: true },
+        { name: `${state.p2.name} (${state.p2.style} - Lvl ${state.p2.level})`, value: `HP: **${state.p2.hp}/${state.p2.maxHp}**`, inline: true }
       )
       .setColor('#E74C3C');
 
@@ -117,6 +121,7 @@ module.exports = {
         actionLog = `🛡️ **${attacker.name}** is guarding!`;
       }
 
+      // Victory Condition
       if (defender.hp <= 0) {
         collector.stop();
 
@@ -156,6 +161,7 @@ module.exports = {
         return i.update({ embeds: [winEmbed], components: [] });
       }
 
+      // Switch turn
       state.turn = defender.id;
       let nextPlayer = state.turn === state.p1.id ? state.p1 : state.p2;
 
@@ -164,12 +170,18 @@ module.exports = {
         .setDescription(`${actionLog}\n\nIt is <@${state.turn}>'s turn!`)
         .setThumbnail(nextPlayer.img)
         .addFields(
-          { name: `${state.p1.name} (Lvl ${state.p1.level})`, value: `HP: **${Math.max(0, state.p1.hp)}/${state.p1.maxHp}**`, inline: true },
-          { name: `${state.p2.name} (Lvl ${state.p2.level})`, value: `HP: **${Math.max(0, state.p2.hp)}/${state.p2.maxHp}**`, inline: true }
+          { name: `${state.p1.name} (${state.p1.style})`, value: `HP: **${Math.max(0, state.p1.hp)}/${state.p1.maxHp}**`, inline: true },
+          { name: `${state.p2.name} (${state.p2.style})`, value: `HP: **${Math.max(0, state.p2.hp)}/${state.p2.maxHp}**`, inline: true }
         )
         .setColor('#3498DB');
 
       await i.update({ embeds: [updateEmbed], components: [buildRow(nextPlayer)] });
+    });
+
+    collector.on('end', (collected, reason) => {
+      if (reason === 'time') {
+        msg.edit({ content: '⏱️ The match timed out due to inactivity.', components: [] }).catch(() => {});
+      }
     });
   }
 };

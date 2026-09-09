@@ -1,78 +1,46 @@
 const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ComponentType } = require('discord.js');
 const Fighter = require('../models/Fighter');
 
+const DEFAULT_AVATAR = 'https://cdn.discordapp.com/embed/avatars/0.png';
+
 const STYLES = {
-  berserker: { 
-    name: 'Berserker', 
-    hp: 110, 
-    attack: 22, 
-    defense: 3, 
-    desc: 'High raw physical damage with standard durability.' 
-  },
-  guardian: { 
-    name: 'Guardian', 
-    hp: 140, 
-    attack: 12, 
-    defense: 12, 
-    desc: 'Tanky build built to withstand heavy hits.' 
-  },
-  assassin: { 
-    name: 'Assassin', 
-    hp: 85, 
-    attack: 26, 
-    defense: 2, 
-    desc: 'Extreme glass cannon with high critical power.' 
-  },
-  monk: { 
-    name: 'Monk', 
-    hp: 120, 
-    attack: 16, 
-    defense: 8, 
-    desc: 'Balanced offense and defense with high sustainability.' 
-  },
-  mage: { 
-    name: 'Mage', 
-    hp: 95, 
-    attack: 24, 
-    defense: 4, 
-    desc: 'High burst magic attacker with squishy defense.' 
-  },
-  paladin: { 
-    name: 'Paladin', 
-    hp: 130, 
-    attack: 14, 
-    defense: 10, 
-    desc: 'High health bruiser with solid block capabilities.' 
-  }
+  berserker: { name: 'Berserker', hp: 110, attack: 22, defense: 3, desc: 'Heavy physical damage attacker.' },
+  guardian: { name: 'Guardian', hp: 140, attack: 12, defense: 12, desc: 'Tanky build built to absorb hits.' },
+  assassin: { name: 'Assassin', hp: 85, attack: 26, defense: 2, desc: 'High crit rate glass cannon.' },
+  monk: { name: 'Monk', hp: 120, attack: 16, defense: 8, desc: 'Balanced stats with high sustain.' },
+  mage: { name: 'Mage', hp: 95, attack: 24, defense: 4, desc: 'Burst caster that ignores defense.' },
+  paladin: { name: 'Paladin', hp: 130, attack: 14, defense: 10, desc: 'Holy defender with strong shields.' }
 };
 
 module.exports = {
   name: 'create',
   aliases: ['start', 'register'],
-  description: 'Create your fighter character and choose a fighting style',
+  description: 'Select a fighting style to finalize your character creation',
   async execute(message, args) {
+    // Check if character already exists
     let fighter = await Fighter.findOne({ userId: message.author.id });
     if (fighter) {
-      return message.channel.send(`⚠️ You already created a character! **${fighter.name}** the **${fighter.fightingStyle}**.`);
+      return message.channel.send(`⚠️ You already have a character! **${fighter.name}** the **${fighter.fightingStyle}**.`);
     }
 
-    const embed = new EmbedBuilder()
-      .setTitle('🛡️ Create Your Fighter')
-      .setDescription('Select your fighting style below to initialize your character stats and join the arena.')
+    // Step 1: Force fighting style selection screen first
+    const selectStyleEmbed = new EmbedBuilder()
+      .setTitle('⚔️ Character Creation: Step 1')
+      .setDescription('You must pick a **Fighting Style** to create your character! Choose an archetype from the menu below to initialize your stats.')
       .addFields(
-        { name: '⚔️ Berserker', value: '`HP: 110 | ATK: 22 | DEF: 3`\nHeavy physical attacker.', inline: true },
-        { name: '🛡️ Guardian', value: '`HP: 140 | ATK: 12 | DEF: 12`\nDefensive wall.', inline: true },
-        { name: '🗡️ Assassin', value: '`HP: 85 | ATK: 26 | DEF: 2`\nHigh damage glass cannon.', inline: true },
-        { name: '🥋 Monk', value: '`HP: 120 | ATK: 16 | DEF: 8`\nBalanced fighter.', inline: true },
-        { name: '🔮 Mage', value: '`HP: 95 | ATK: 24 | DEF: 4`\nBurst damage caster.', inline: true },
-        { name: '✝️ Paladin', value: '`HP: 130 | ATK: 14 | DEF: 10`\nSturdy holy warrior.', inline: true }
+        { name: '⚔️ Berserker', value: '`HP: 110 | ATK: 22 | DEF: 3`', inline: true },
+        { name: '🛡️ Guardian', value: '`HP: 140 | ATK: 12 | DEF: 12`', inline: true },
+        { name: '🗡️ Assassin', value: '`HP: 85 | ATK: 26 | DEF: 2`', inline: true },
+        { name: '🥋 Monk', value: '`HP: 120 | ATK: 16 | DEF: 8`', inline: true },
+        { name: '🔮 Mage', value: '`HP: 95 | ATK: 24 | DEF: 4`', inline: true },
+        { name: '✝️ Paladin', value: '`HP: 130 | ATK: 14 | DEF: 10`', inline: true }
       )
       .setColor('#9B59B6');
 
-    const menu = new ActionRowBuilder().addComponents(
+    const selectMenu = new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
-        .setCustomId('select_style')
-        .setPlaceholder('Choose a Fighting Style...')
+        .setCustomId('select_fighting_style')
+        .setPlaceholder('Select a Fighting Style to create character...')
         .addOptions([
           { label: 'Berserker', value: 'berserker', description: STYLES.berserker.desc, emoji: '⚔️' },
           { label: 'Guardian', value: 'guardian', description: STYLES.guardian.desc, emoji: '🛡️' },
@@ -83,7 +51,7 @@ module.exports = {
         ])
     );
 
-    const menuMsg = await message.channel.send({ embeds: [embed], components: [menu] });
+    const menuMsg = await message.channel.send({ embeds: [selectStyleEmbed], components: [selectMenu] });
 
     const collector = menuMsg.createMessageComponentCollector({
       componentType: ComponentType.StringSelect,
@@ -92,11 +60,13 @@ module.exports = {
 
     collector.on('collect', async (i) => {
       if (i.user.id !== message.author.id) {
-        return i.reply({ content: 'This character creation menu is not for you!', ephemeral: true });
+        return i.reply({ content: 'This selection menu is not for you!', ephemeral: true });
       }
 
       const selected = STYLES[i.values[0]];
+      const avatarUrl = message.author.displayAvatarURL({ extension: 'png', size: 256 }) || DEFAULT_AVATAR;
 
+      // Step 2: Create and save character in DB ONLY after style selection
       fighter = await Fighter.create({
         userId: message.author.id,
         name: message.author.username,
@@ -105,13 +75,13 @@ module.exports = {
         maxHp: selected.hp,
         attack: selected.attack,
         defense: selected.defense,
-        imageUrl: message.author.displayAvatarURL({ extension: 'png' }) || 'https://i.imgur.com/8Q9Z5b3.png'
+        imageUrl: avatarUrl
       });
 
       const confirmEmbed = new EmbedBuilder()
-        .setTitle('🎉 Character Created!')
-        .setThumbnail(fighter.imageUrl)
-        .setDescription(`Welcome to the arena, **${fighter.name}**!`)
+        .setTitle('🎉 Character Successfully Created!')
+        .setThumbnail(avatarUrl)
+        .setDescription(`Style chosen: **${fighter.fightingStyle}**!\nYour character **${fighter.name}** has been generated and added to the arena database.`)
         .addFields(
           { name: 'Style', value: fighter.fightingStyle, inline: true },
           { name: 'HP', value: `${fighter.hp}`, inline: true },
@@ -124,7 +94,11 @@ module.exports = {
 
     collector.on('end', (collected, reason) => {
       if (reason === 'time' && collected.size === 0) {
-        menuMsg.edit({ content: 'Character creation timed out. Run `.create` again when ready!', components: [] }).catch(() => {});
+        menuMsg.edit({ 
+          content: '⏱️ Character creation canceled (timed out without picking a fighting style). Run `.create` again when ready!', 
+          embeds: [], 
+          components: [] 
+        }).catch(() => {});
       }
     });
   }

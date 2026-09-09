@@ -5,7 +5,8 @@ const BASE_REWARD = 100;
 const DEFAULT_AVATAR = 'https://i.imgur.com/8Q9Z5b3.png';
 
 module.exports = {
-  name: ['battle','pvp']
+  name: 'battle',
+  aliases: ['pvp'],
   description: 'Level-based PvP with style stats, unlockable moves, and coin rewards',
   async execute(message, args) {
     const opponent = message.mentions.users.first();
@@ -13,16 +14,14 @@ module.exports = {
       return message.channel.send('Mention a valid user to challenge!');
     }
 
-    // Check if player 1 has created a character
     let f1 = await Fighter.findOne({ userId: message.author.id });
     if (!f1) {
       return message.channel.send('⚠️ You must create a character first! Type `,create` to pick your fighting style.');
     }
 
-    // Check if player 2 has created a character
     let f2 = await Fighter.findOne({ userId: opponent.id });
     if (!f2) {
-      return message.channel.send(`⚠️ **${opponent.username}** has not created a character yet! They need to type \`,create\` first.`);
+      return message.channel.send(`⚠️ **${opponent.displayName}** has not created a character yet! They need to type \`,create\` first.`);
     }
 
     const p1MaxHp = f1.maxHp || f1.hp || 100;
@@ -73,7 +72,7 @@ module.exports = {
     }
 
     const embed = new EmbedBuilder()
-      .setTitle('⚔️ Battle has began')
+      .setTitle('⚔️ Battle has begun')
       .setDescription(`It is <@${state.turn}>'s turn!`)
       .setThumbnail(state.p1.img)
       .addFields(
@@ -96,6 +95,7 @@ module.exports = {
       let defender = state.turn === state.p1.id ? state.p2 : state.p1;
       let actionLog = '';
 
+      // Reset attacker's guard when they start taking their turn
       attacker.guarding = false;
 
       if (i.customId === 'quick') {
@@ -108,20 +108,19 @@ module.exports = {
           let dmg = Math.max(10, Math.floor(attacker.atk * 1.6) - defender.def);
           if (defender.guarding) dmg = Math.floor(dmg / 2);
           defender.hp -= dmg;
-          actionLog = `**${attacker.name}** landed a Heavy Slam for **${dmg} DMG**!`;
+          actionLog = `💥 **${attacker.name}** landed a Heavy Slam for **${dmg} DMG**!`;
         } else {
-          actionLog = `**${attacker.name}** has **MISSED**!`;
+          actionLog = `💨 **${attacker.name}** missed their Heavy Slam!`;
         }
       } else if (i.customId === 'ultimate') {
         let dmg = Math.max(20, Math.floor(attacker.atk * 2.2));
         defender.hp -= dmg;
-        actionLog = `**${attacker.name}** unleashed ULTIMATE BURST for **${dmg} UNBLOCKABLE DMG**!`;
+        actionLog = `⚡ **${attacker.name}** unleashed ULTIMATE BURST for **${dmg} UNBLOCKABLE DMG**!`;
       } else if (i.customId === 'guard') {
         attacker.guarding = true;
-        actionLog = `**${attacker.name}** is guarding!`;
+        actionLog = `🛡️ **${attacker.name}** is guarding against incoming attacks!`;
       }
 
-      // Victory Condition
       if (defender.hp <= 0) {
         collector.stop();
 
@@ -161,7 +160,6 @@ module.exports = {
         return i.update({ embeds: [winEmbed], components: [] });
       }
 
-      // Switch turn
       state.turn = defender.id;
       let nextPlayer = state.turn === state.p1.id ? state.p1 : state.p2;
 

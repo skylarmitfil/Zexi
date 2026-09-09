@@ -12,7 +12,7 @@ const fighterSchema = new mongoose.Schema({
   attack: { type: Number, default: 15 },
   defense: { type: Number, default: 5 },
   balance: { type: Number, default: 100 },
-  imageUrl: { type: String, default: 'https://i.imgur.com/8Q9Z5b3.png' },
+  imageUrl: { type: String, default: 'https://cdn.discordapp.com/embed/avatars/0.png' },
   wins: { type: Number, default: 0 },
   losses: { type: Number, default: 0 }
 }, { timestamps: true });

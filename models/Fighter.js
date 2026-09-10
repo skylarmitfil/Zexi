@@ -1,7 +1,8 @@
 const mongoose = require('mongoose');
 
 const fighterSchema = new mongoose.Schema({
-  userId: { type: String, required: true, unique: true },
+  userId: { type: String, required: true },
+  slot: { type: Number, required: true, enum: [1, 2] },
   name: { type: String, required: true },
   fightingStyle: { type: String, required: true },
   level: { type: Number, required: true },
@@ -16,5 +17,7 @@ const fighterSchema = new mongoose.Schema({
   wins: { type: Number, required: true },
   losses: { type: Number, required: true }
 }, { timestamps: true });
+
+fighterSchema.index({ userId: 1, slot: 1 }, { unique: true });
 
 module.exports = mongoose.model('Fighter', fighterSchema);

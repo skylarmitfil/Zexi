@@ -4,8 +4,6 @@ const activities = [
   {
     type: ActivityType.Playing,
     name: 'Roblox',
-    state: 'In a private server',
-    details: 'Grinding levels',
     status: 'idle'
   },
   {
@@ -19,13 +17,11 @@ const activities = [
   {
     type: ActivityType.Listening,
     name: 'Spotify',
-    details: 'Favorite Playlist',
-    state: 'Listening to music',
     status: 'online'
   },
   {
     type: ActivityType.Competing,
-    name: 'with code',
+    name: 'a coding challenge',
     status: 'idle'
   }
 ];
@@ -49,22 +45,13 @@ function updatePresence(client) {
     ? activityConfig.name(client) 
     : activityConfig.name;
 
-  const activityData = {
-    name,
-    type: activityConfig.type,
-    state: activityConfig.state || undefined,
-    details: activityConfig.details || undefined
-  };
-
   client.user.setPresence({
-    activities: [activityData],
-    status: activityConfig.status || 'idle'
+    activities: [{
+      name: name,
+      type: activityConfig.type
+    }],
+    status: activityConfig.status || 'online'
   });
-
-  const activityTypeNames = ['Playing', 'Streaming', 'Listening', 'Watching', 'Custom', 'Competing'];
-  const typeLabel = activityTypeNames[activityConfig.type] || 'Activity';
-
-  console.log(`[Presence] Updated | Status: ${activityConfig.status || 'idle'} | ${typeLabel}: ${name}`);
 
   currentIndex = (currentIndex + 1) % activities.length;
 }

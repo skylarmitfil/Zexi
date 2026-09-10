@@ -18,7 +18,6 @@ const fighterSchema = new mongoose.Schema({
   losses: { type: Number, required: true, default: 0 }
 }, { timestamps: true });
 
-// Ensures unique slot per user without breaking legacy indexes
 fighterSchema.index({ userId: 1, slot: 1 }, { unique: true });
 
 module.exports = mongoose.model('Fighter', fighterSchema);

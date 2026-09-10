@@ -24,9 +24,16 @@ module.exports = {
   aliases: ['start', 'register'],
   description: 'Pick a fighting style and distribute initial stat points to build your character',
   async execute(message, args) {
+    // Check if character exists or clean up broken character entries
     let fighter = await Fighter.findOne({ userId: message.author.id });
+
     if (fighter) {
-      return message.channel.send(`⚠️ You already have a character! **${fighter.name}** the **${fighter.fightingStyle}**.`);
+      if (!fighter.fightingStyle || fighter.fightingStyle === 'undefined') {
+        await Fighter.deleteOne({ userId: message.author.id });
+        fighter = null;
+      } else {
+        return message.channel.send(`⚠️ You already have a character! **${fighter.name}** the **${fighter.fightingStyle}**.`);
+      }
     }
 
     // STEP 1: Select Fighting Style
@@ -136,7 +143,7 @@ module.exports = {
             maxHp: finalHp,
             attack: finalAtk,
             defense: finalDef,
-            statPoints: unspentPoints, // Saves remaining unallocated points if confirmed early
+            statPoints: unspentPoints,
             imageUrl: avatarUrl
           });
 

@@ -12,7 +12,7 @@ const {
 const Fighter = require('../models/Fighter');
 
 const STYLES = {
-  // Page 1 Styles
+  // Page 1
   berserker: { name: 'Berserker', hp: 110, attack: 22, defense: 3, desc: 'Heavy physical damage attacker.', page: 1 },
   guardian: { name: 'Guardian', hp: 140, attack: 12, defense: 12, desc: 'Tanky build built to absorb hits.', page: 1 },
   assassin: { name: 'Assassin', hp: 85, attack: 26, defense: 2, desc: 'High crit rate glass cannon.', page: 1 },
@@ -20,7 +20,7 @@ const STYLES = {
   mage: { name: 'Mage', hp: 95, attack: 24, defense: 4, desc: 'Burst caster that ignores defense.', page: 1 },
   paladin: { name: 'Paladin', hp: 130, attack: 14, defense: 10, desc: 'Holy defender with strong shields.', page: 1 },
   
-  // Page 2 Styles
+  // Page 2
   necromancer: { name: 'Necromancer', hp: 90, attack: 25, defense: 3, desc: 'Drains enemy vitality to heal.', page: 2 },
   samurai: { name: 'Samurai', hp: 105, attack: 23, defense: 5, desc: 'Master of counter-attacks.', page: 2 },
   druid: { name: 'Druid', hp: 125, attack: 15, defense: 9, desc: 'Nature warrior with regeneration.', page: 2 },
@@ -34,7 +34,6 @@ module.exports = {
   aliases: ['start', 'register'],
   description: 'Select a slot, choose class across pages, enter custom name, and build stats.',
   async execute(message, args) {
-    // Fetch existing fighters safely using lean()
     const existingFighters = await Fighter.find({ userId: message.author.id }).lean();
 
     // STEP 1: Select Character Slot
@@ -105,9 +104,10 @@ module.exports = {
           description: STYLES[k].desc
         }));
 
+        // Dynamically append page number to customId to prevent component ID collisions
         const selectRow = new ActionRowBuilder().addComponents(
           new StringSelectMenuBuilder()
-            .setCustomId('select_style')
+            .setCustomId(`select_style_p${page}`)
             .setPlaceholder(`Select a Fighting Style (Page ${page})...`)
             .addOptions(selectOptions)
         );
@@ -127,20 +127,23 @@ module.exports = {
       styleCollector.on('collect', async (i) => {
         if (i.user.id !== message.author.id) return;
 
-        // Handle Page Switching Buttons
+        // Handle Navigation Page Buttons
         if (i.isButton()) {
           if (i.customId === 'page_prev') currentPage = 1;
           if (i.customId === 'page_next') currentPage = 2;
           return await i.update(buildStyleComponents(currentPage));
         }
 
-        // Handle Style Selected via Dropdown
-        if (i.isStringSelect() && i.customId === 'select_style') {
-          styleCollector.stop('selected');
+        // Handle Class Selected via Dropdown across both pages
+        if (i.isStringSelect() && i.customId.startsWith('select_style_p')) {
           const selectedKey = i.values[0];
           const baseStyle = STYLES[selectedKey];
 
-          // STEP 3: Prompt for Custom Character Name via Modal
+          if (!baseStyle) return;
+
+          styleCollector.stop('selected');
+
+          // STEP 3: Prompt Custom Character Name Modal
           const modal = new ModalBuilder()
             .setCustomId('character_name_modal')
             .setTitle('Name Your Character');
@@ -157,7 +160,6 @@ module.exports = {
 
           await i.showModal(modal);
 
-          // Await Modal Submission
           const modalSubmit = await i.awaitModalSubmit({
             filter: (m) => m.customId === 'character_name_modal' && m.user.id === message.author.id,
             time: 60000

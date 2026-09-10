@@ -8,8 +8,6 @@ const {
 } = require('discord.js');
 const Fighter = require('../models/Fighter');
 
-const DEFAULT_AVATAR = 'https://cdn.discordapp.com/embed/avatars/0.png';
-
 const STYLES = {
   berserker: { name: 'Berserker', hp: 110, attack: 22, defense: 3, desc: 'Heavy physical damage attacker.' },
   guardian: { name: 'Guardian', hp: 140, attack: 12, defense: 12, desc: 'Tanky build built to absorb hits.' },
@@ -133,18 +131,23 @@ module.exports = {
           const finalHp = baseStyle.hp + addedHp;
           const finalAtk = baseStyle.attack + addedAtk;
           const finalDef = baseStyle.defense + addedDef;
-          const avatarUrl = message.author.displayAvatarURL({ extension: 'png', size: 256 }) || DEFAULT_AVATAR;
+          const avatarUrl = message.author.displayAvatarURL({ extension: 'png', size: 256 });
 
           fighter = await Fighter.create({
             userId: message.author.id,
             name: message.author.username,
             fightingStyle: baseStyle.name,
+            level: 1,
+            xp: 0,
+            statPoints: unspentPoints,
             hp: finalHp,
             maxHp: finalHp,
             attack: finalAtk,
             defense: finalDef,
-            statPoints: unspentPoints,
-            imageUrl: avatarUrl
+            balance: 100,
+            imageUrl: avatarUrl,
+            wins: 0,
+            losses: 0
           });
 
           const finalEmbed = new EmbedBuilder()

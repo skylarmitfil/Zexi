@@ -3,6 +3,7 @@ const Fighter = require('../models/Fighter');
 
 module.exports = {
   name: 'pvp',
+  aliases: ['battle'], // Enables .pvp and .battle
   description: 'Select a character slot and challenge another player',
   async execute(message, args) {
     const opponent = message.mentions.users.first();
@@ -36,7 +37,7 @@ module.exports = {
 
     const selectEmbed = new EmbedBuilder()
       .setTitle('⚔️ Choose Your Combatant')
-      .setDescription('Select which character you want to bring into this PvP match:')
+      .setDescription('Select which character you want to bring into this match:')
       .setColor('#3498DB');
 
     const p1Msg = await message.channel.send({ embeds: [selectEmbed], components: [selectRow] });
@@ -62,7 +63,7 @@ module.exports = {
       p2Row.addComponents(new ButtonBuilder().setCustomId('decline').setLabel('Decline').setStyle(ButtonStyle.Danger));
 
       const inviteEmbed = new EmbedBuilder()
-        .setTitle('⚔️ PvP Challenge Issued!')
+        .setTitle('⚔️ Challenge Issued!')
         .setDescription(`**<@${message.author.id}>** chooses **${p1Selected.name} (${p1Selected.fightingStyle})** and challenges **<@${opponent.id}>**!\n\n**<@${opponent.id}>**, select your character slot to accept or click Decline:`)
         .setColor('#E67E22');
 

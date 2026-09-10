@@ -34,25 +34,25 @@ module.exports = {
   aliases: ['start', 'register'],
   description: 'Select a slot, choose class across pages, enter custom name, and build stats.',
   async execute(message, args) {
-    const existingFighters = await Fighter.find({ userId: message.author.id });
+    // Fetch existing fighters safely using lean()
+    const existingFighters = await Fighter.find({ userId: message.author.id }).lean();
 
     // STEP 1: Select Character Slot
+    const slot1Char = existingFighters.find(f => f.slot === 1);
+    const slot2Char = existingFighters.find(f => f.slot === 2);
+
     const slotEmbed = new EmbedBuilder()
       .setTitle('📁 Character Creation: Select Slot')
       .setDescription('Choose an available slot for your new character (You have 2 minutes):')
       .addFields(
         { 
           name: 'Slot 1', 
-          value: existingFighters.some(f => f.slot === 1) 
-            ? `Occupied: **${existingFighters.find(f => f.slot === 1).name}**` 
-            : '🟢 Empty Slot', 
+          value: slot1Char ? `Occupied: **${slot1Char.name || 'Fighter'}**` : '🟢 Empty Slot', 
           inline: true 
         },
         { 
           name: 'Slot 2', 
-          value: existingFighters.some(f => f.slot === 2) 
-            ? `Occupied: **${existingFighters.find(f => f.slot === 2).name}**` 
-            : '🟢 Empty Slot', 
+          value: slot2Char ? `Occupied: **${slot2Char.name || 'Fighter'}**` : '🟢 Empty Slot', 
           inline: true 
         }
       )
@@ -88,11 +88,15 @@ module.exports = {
 
         const embed = new EmbedBuilder()
           .setTitle(`⚔️ Choose Fighting Style (Page ${page}/2)`)
-          .setDescription(`Select a class from Page ${page} using the menu below, or use arrows to flip pages.`)
+          .setDescription(`Select a class from Page ${page} using the dropdown menu below, or click arrows to flip pages.`)
           .setColor('#9B59B6');
 
         pageKeys.forEach(k => {
-          embed.addFields({ name: STYLES[k].name, value: `HP: ${STYLES[k].hp} | ATK: ${STYLES[k].attack} | DEF: ${STYLES[k].defense}\n_${STYLES[k].desc}_`, inline: true });
+          embed.addFields({ 
+            name: STYLES[k].name, 
+            value: `HP: ${STYLES[k].hp} | ATK: ${STYLES[k].attack} | DEF: ${STYLES[k].defense}\n_${STYLES[k].desc}_`, 
+            inline: true 
+          });
         });
 
         const selectOptions = pageKeys.map(k => ({
@@ -123,20 +127,20 @@ module.exports = {
       styleCollector.on('collect', async (i) => {
         if (i.user.id !== message.author.id) return;
 
-        // Handle Page Switching
+        // Handle Page Switching Buttons
         if (i.isButton()) {
           if (i.customId === 'page_prev') currentPage = 1;
           if (i.customId === 'page_next') currentPage = 2;
           return await i.update(buildStyleComponents(currentPage));
         }
 
-        // Handle Style Selected
+        // Handle Style Selected via Dropdown
         if (i.isStringSelect() && i.customId === 'select_style') {
           styleCollector.stop('selected');
           const selectedKey = i.values[0];
           const baseStyle = STYLES[selectedKey];
 
-          // STEP 3: Prompt for Custom Name via Modal
+          // STEP 3: Prompt for Custom Character Name via Modal
           const modal = new ModalBuilder()
             .setCustomId('character_name_modal')
             .setTitle('Name Your Character');
@@ -153,7 +157,7 @@ module.exports = {
 
           await i.showModal(modal);
 
-          // Listen for Modal Submission
+          // Await Modal Submission
           const modalSubmit = await i.awaitModalSubmit({
             filter: (m) => m.customId === 'character_name_modal' && m.user.id === message.author.id,
             time: 60000
@@ -163,7 +167,7 @@ module.exports = {
             return mainMsg.edit({
               embeds: [new EmbedBuilder().setTitle('⏱️ Creation Timed Out').setDescription('Name entry timed out. Type `.create` to try again.').setColor('#95A5A6')],
               components: []
-            });
+            }).catch(() => {});
           }
 
           const customName = modalSubmit.fields.getTextInputValue('char_name').trim() || message.author.username;
@@ -232,8 +236,8 @@ module.exports = {
                 .setThumbnail(avatarUrl)
                 .setDescription(`**${created.name}** the **${created.fightingStyle}** is ready for battle!`)
                 .addFields(
-                  { name: 'HP', value: `${created.hp}`, inline: true },
-                  { name: 'ATK / DEF', value: `${created.attack} / ${created.defense}`, inline: true }
+                  { name: '❤️ HP', value: `${created.hp}`, inline: true },
+                  { name: '⚔️ ATK / 🛡️ DEF', value: `${created.attack} / ${created.defense}`, inline: true }
                 )
                 .setColor('#2ECC71');
 

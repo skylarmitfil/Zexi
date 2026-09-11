@@ -104,7 +104,6 @@ module.exports = {
           description: STYLES[k].desc
         }));
 
-        // Dynamically append page number to customId to prevent component ID collisions
         const selectRow = new ActionRowBuilder().addComponents(
           new StringSelectMenuBuilder()
             .setCustomId(`select_style_p${page}`)
@@ -127,14 +126,12 @@ module.exports = {
       styleCollector.on('collect', async (i) => {
         if (i.user.id !== message.author.id) return;
 
-        // Handle Navigation Page Buttons
         if (i.isButton()) {
           if (i.customId === 'page_prev') currentPage = 1;
           if (i.customId === 'page_next') currentPage = 2;
           return await i.update(buildStyleComponents(currentPage));
         }
 
-        // Handle Class Selected via Dropdown across both pages
         if (i.isStringSelect() && i.customId.startsWith('select_style_p')) {
           const selectedKey = i.values[0];
           const baseStyle = STYLES[selectedKey];

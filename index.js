@@ -39,7 +39,7 @@ client.on(Events.MessageCreate, async (message) => {
   const args = message.content.slice(prefix.length).trim().split(/ +/);
   const commandName = args.shift().toLowerCase();
 
-  const command = commands.get(commandName) || commands.find(cmd => cmd.aliases && cmd.aliases.includes(commandName));
+  const command = commands.get(commandName) || [...commands.values()].find(cmd => cmd.aliases && cmd.aliases.includes(commandName));
   if (!command) return;
 
   try {

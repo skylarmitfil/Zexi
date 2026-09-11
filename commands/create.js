@@ -11,15 +11,12 @@ const {
 const Fighter = require('../models/Fighter');
 
 const STYLES = {
-  // Page 1
   berserker: { name: 'Berserker', hp: 110, attack: 22, defense: 3, desc: 'Heavy physical damage attacker.', page: 1 },
   guardian: { name: 'Guardian', hp: 140, attack: 12, defense: 12, desc: 'Tanky build built to absorb hits.', page: 1 },
   assassin: { name: 'Assassin', hp: 85, attack: 26, defense: 2, desc: 'High crit rate glass cannon.', page: 1 },
   monk: { name: 'Monk', hp: 120, attack: 16, defense: 8, desc: 'Balanced stats with high sustain.', page: 1 },
   mage: { name: 'Mage', hp: 95, attack: 24, defense: 4, desc: 'Burst caster that ignores defense.', page: 1 },
   paladin: { name: 'Paladin', hp: 130, attack: 14, defense: 10, desc: 'Holy defender with strong shields.', page: 1 },
-  
-  // Page 2
   necromancer: { name: 'Necromancer', hp: 90, attack: 25, defense: 3, desc: 'Drains enemy vitality to heal.', page: 2 },
   samurai: { name: 'Samurai', hp: 105, attack: 23, defense: 5, desc: 'Master of counter-attacks.', page: 2 },
   druid: { name: 'Druid', hp: 125, attack: 15, defense: 9, desc: 'Nature warrior with regeneration.', page: 2 },
@@ -35,7 +32,6 @@ module.exports = {
   async execute(message, args) {
     let existingFighters = await Fighter.find({ userId: message.author.id }).lean();
 
-    // Helper function to build slot selection menu
     function buildSlotComponents() {
       const slot1Char = existingFighters.find(f => f.slot === 1);
       const slot2Char = existingFighters.find(f => f.slot === 2);
@@ -69,7 +65,6 @@ module.exports = {
 
     const mainMsg = await message.channel.send(buildSlotComponents());
 
-    // Loop for Step 1: Slot Selection / Deletion
     let chosenSlot = null;
 
     while (!chosenSlot) {
@@ -85,7 +80,6 @@ module.exports = {
         }).catch(() => {});
       }
 
-      // HANDLE DELETION
       if (slotInteraction.customId.startsWith('delete_')) {
         const deleteSlotNum = parseInt(slotInteraction.customId.split('_')[1]);
         const targetChar = existingFighters.find(f => f.slot === deleteSlotNum);
@@ -95,14 +89,13 @@ module.exports = {
           continue;
         }
 
-        // Deletion Confirmation Screen
         const confirmEmbed = new EmbedBuilder()
           .setTitle('⚠️ WARNING: Delete Character?')
           .setDescription(`Are you sure you want to permanently delete **${targetChar.name}** (${targetChar.fightingStyle}) from **Slot ${deleteSlotNum}**?\n\n**This action cannot be undone!**`)
           .setColor('#E74C3C');
 
         const confirmRow = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('confirm_delete').setLabel('Yes, Delete Permanentally').setStyle(ButtonStyle.Danger),
+          new ButtonBuilder().setCustomId('confirm_delete').setLabel('Yes, Delete Permanently').setStyle(ButtonStyle.Danger),
           new ButtonBuilder().setCustomId('cancel_delete').setLabel('Cancel').setStyle(ButtonStyle.Secondary)
         );
 
@@ -119,7 +112,6 @@ module.exports = {
 
           await confirmInteraction.update(buildSlotComponents());
         } else {
-          // Cancelled or timed out confirmation
           if (confirmInteraction) {
             await confirmInteraction.update(buildSlotComponents());
           } else {
@@ -130,7 +122,6 @@ module.exports = {
         continue;
       }
 
-      // HANDLE SLOT SELECTION FOR CREATION
       if (slotInteraction.customId.startsWith('slot_')) {
         const selectedNum = parseInt(slotInteraction.customId.split('_')[1]);
         const existingInSlot = existingFighters.find(f => f.slot === selectedNum);
@@ -145,7 +136,6 @@ module.exports = {
 
         chosenSlot = selectedNum;
 
-        // STEP 2: Paginated Class Selection Loop
         let currentPage = 1;
         let selectedStyleKey = null;
         let styleInteraction = null;
@@ -189,7 +179,6 @@ module.exports = {
 
         await slotInteraction.update(buildStyleComponents(currentPage));
 
-        // Event Loop for Navigating Pages and Picking Class
         while (!selectedStyleKey) {
           const interaction = await mainMsg.awaitMessageComponent({
             filter: (i) => i.user.id === message.author.id,
@@ -207,7 +196,7 @@ module.exports = {
             if (interaction.customId === 'page_prev') currentPage = 1;
             if (interaction.customId === 'page_next') currentPage = 2;
             await interaction.update(buildStyleComponents(currentPage));
-          } else if (interaction.isStringSelect()) {
+          } else if (interaction.isStringSelectMenu()) {
             selectedStyleKey = interaction.values[0];
             styleInteraction = interaction;
           }
@@ -215,7 +204,6 @@ module.exports = {
 
         const baseStyle = STYLES[selectedStyleKey];
 
-        // STEP 3: Prompt Character Name Modal
         const modalCustomId = `char_modal_${message.author.id}_${Date.now()}`;
         const modal = new ModalBuilder()
           .setCustomId(modalCustomId)
@@ -247,7 +235,6 @@ module.exports = {
 
         const customName = modalSubmit.fields.getTextInputValue('char_name').trim() || message.author.username;
 
-        // STEP 4: Stat Point Allocation
         let unspentPoints = 5;
         let addedHp = 0;
         let addedAtk = 0;
@@ -276,7 +263,6 @@ module.exports = {
 
         await modalSubmit.update({ embeds: [renderAllocationEmbed()], components: [renderButtons()] });
 
-        // Stat Point allocation Loop
         let finished = false;
 
         while (!finished) {

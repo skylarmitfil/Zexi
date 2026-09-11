@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, Events, Collection } = require('discord.js');
+const { Client, GatewayIntentBits, Events } = require('discord.js');
 const { connectDatabase } = require('./database');
 const { startPresenceRotation } = require('./presence');
 const { loadCommands, commands, initCommandWebSocket } = require('./commandHandler');
@@ -58,23 +58,50 @@ async function bootstrap() {
   client.once(Events.ClientReady, async (readyClient) => {
     console.log(`🤖 Logged in as ${readyClient.user.tag}`);
 
-    // Auto-migrate legacy characters missing the 'slot' or stat fields
+    // Direct Mongo update to prevent Mongoose validation failures on old documents
     try {
-      const unassignedFighters = await Fighter.find({ slot: { $exists: false } });
-      if (unassignedFighters.length > 0) {
-        console.log(`🔄 Found ${unassignedFighters.length} legacy character(s) missing slot data. Migrating to Slot 1...`);
-        for (const fighter of unassignedFighters) {
-          fighter.slot = 1;
-          if (fighter.statPoints === undefined) fighter.statPoints = 0;
-          if (fighter.xp === undefined) fighter.xp = 0;
-          if (fighter.level === undefined) fighter.level = 1;
-          if (fighter.wins === undefined) fighter.wins = 0;
-          if (fighter.losses === undefined) fighter.losses = 0;
-          if (fighter.balance === undefined) fighter.balance = 100;
-          await fighter.save();
+      // 1. Assign slot = 1 to unassigned legacy documents
+      const slotResult = await Fighter.updateMany(
+        { slot: { $exists: false } },
+        { 
+          $set: { 
+            slot: 1,
+            level: 1,
+            xp: 0,
+            statPoints: 0,
+            wins: 0,
+            losses: 0,
+            balance: 100
+          } 
         }
-        console.log('✅ Legacy character migration completed successfully!');
+      );
+
+      if (slotResult.modifiedCount > 0) {
+        console.log(`✅ Migrated ${slotResult.modifiedCount} legacy character(s) to Slot 1.`);
       }
+
+      // 2. Patch missing schema required fields on corrupted test records
+      await Fighter.updateMany(
+        { imageUrl: { $exists: false } },
+        { $set: { imageUrl: 'https://cdn.discordapp.com/embed/avatars/0.png' } }
+      );
+      await Fighter.updateMany(
+        { fightingStyle: { $exists: false } },
+        { $set: { fightingStyle: 'Berserker' } }
+      );
+      await Fighter.updateMany(
+        { defense: { $exists: false } },
+        { $set: { defense: 5 } }
+      );
+      await Fighter.updateMany(
+        { attack: { $exists: false } },
+        { $set: { attack: 15 } }
+      );
+      await Fighter.updateMany(
+        { hp: { $exists: false } },
+        { $set: { hp: 100, maxHp: 100 } }
+      );
+
     } catch (err) {
       console.error('❌ Error during legacy character migration:', err);
     }

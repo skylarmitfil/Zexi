@@ -4,7 +4,6 @@ const {
   StringSelectMenuBuilder, 
   ButtonBuilder, 
   ButtonStyle, 
-  ComponentType,
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle
@@ -32,248 +31,308 @@ const STYLES = {
 module.exports = {
   name: 'create',
   aliases: ['start', 'register'],
-  description: 'Select a slot, choose class across pages, enter custom name, and build stats.',
+  description: 'Manage, delete, or create a character across available slots.',
   async execute(message, args) {
-    const existingFighters = await Fighter.find({ userId: message.author.id }).lean();
+    let existingFighters = await Fighter.find({ userId: message.author.id }).lean();
 
-    // STEP 1: Select Character Slot
-    const slot1Char = existingFighters.find(f => f.slot === 1);
-    const slot2Char = existingFighters.find(f => f.slot === 2);
+    // Helper function to build slot selection menu
+    function buildSlotComponents() {
+      const slot1Char = existingFighters.find(f => f.slot === 1);
+      const slot2Char = existingFighters.find(f => f.slot === 2);
 
-    const slotEmbed = new EmbedBuilder()
-      .setTitle('📁 Character Creation: Select Slot')
-      .setDescription('Choose an available slot for your new character (You have 2 minutes):')
-      .addFields(
-        { 
-          name: 'Slot 1', 
-          value: slot1Char ? `Occupied: **${slot1Char.name || 'Fighter'}**` : '🟢 Empty Slot', 
-          inline: true 
-        },
-        { 
-          name: 'Slot 2', 
-          value: slot2Char ? `Occupied: **${slot2Char.name || 'Fighter'}**` : '🟢 Empty Slot', 
-          inline: true 
-        }
-      )
-      .setColor('#3498DB');
+      const slotEmbed = new EmbedBuilder()
+        .setTitle('📁 Character Creation: Select Slot')
+        .setDescription('Select an empty slot to create a character, or delete an existing one:')
+        .addFields(
+          { name: 'Slot 1', value: slot1Char ? `Occupied: **${slot1Char.name}** (${slot1Char.fightingStyle})` : '🟢 Empty Slot', inline: true },
+          { name: 'Slot 2', value: slot2Char ? `Occupied: **${slot2Char.name}** (${slot2Char.fightingStyle})` : '🟢 Empty Slot', inline: true }
+        )
+        .setColor('#3498DB');
 
-    const slotRow = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('slot_1').setLabel('Slot 1').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId('slot_2').setLabel('Slot 2').setStyle(ButtonStyle.Primary)
-    );
+      const buttons = [
+        new ButtonBuilder().setCustomId('slot_1').setLabel('Slot 1').setStyle(ButtonStyle.Primary),
+      ];
 
-    const mainMsg = await message.channel.send({ embeds: [slotEmbed], components: [slotRow] });
-    const slotCollector = mainMsg.createMessageComponentCollector({ componentType: ComponentType.Button, time: 120000 });
-
-    slotCollector.on('collect', async (slotInteraction) => {
-      if (slotInteraction.user.id !== message.author.id) {
-        return slotInteraction.reply({ content: 'This character creation menu is not for you!', ephemeral: true });
+      if (slot1Char) {
+        buttons.push(new ButtonBuilder().setCustomId('delete_1').setLabel('🗑️ Delete Slot 1').setStyle(ButtonStyle.Danger));
       }
 
-      const chosenSlot = slotInteraction.customId === 'slot_1' ? 1 : 2;
-      const existingInSlot = existingFighters.find(f => f.slot === chosenSlot);
+      buttons.push(new ButtonBuilder().setCustomId('slot_2').setLabel('Slot 2').setStyle(ButtonStyle.Primary));
 
-      if (existingInSlot) {
-        return slotInteraction.reply({ content: `⚠️ You already have a character in **Slot ${chosenSlot}** (${existingInSlot.name})!`, ephemeral: true });
+      if (slot2Char) {
+        buttons.push(new ButtonBuilder().setCustomId('delete_2').setLabel('🗑️ Delete Slot 2').setStyle(ButtonStyle.Danger));
       }
 
-      slotCollector.stop('slot_chosen');
+      const slotRow = new ActionRowBuilder().addComponents(buttons);
+      return { embeds: [slotEmbed], components: [slotRow] };
+    }
 
-      // STEP 2: Paginated Class Selection
-      let currentPage = 1;
+    const mainMsg = await message.channel.send(buildSlotComponents());
 
-      function buildStyleComponents(page) {
-        const pageKeys = Object.keys(STYLES).filter(k => STYLES[k].page === page);
+    // Loop for Step 1: Slot Selection / Deletion
+    let chosenSlot = null;
 
-        const embed = new EmbedBuilder()
-          .setTitle(`⚔️ Choose Fighting Style (Page ${page}/2)`)
-          .setDescription(`Select a class from Page ${page} using the dropdown menu below, or click arrows to flip pages.`)
-          .setColor('#9B59B6');
+    while (!chosenSlot) {
+      const slotInteraction = await mainMsg.awaitMessageComponent({
+        filter: (i) => i.user.id === message.author.id,
+        time: 120000
+      }).catch(() => null);
 
-        pageKeys.forEach(k => {
-          embed.addFields({ 
-            name: STYLES[k].name, 
-            value: `HP: ${STYLES[k].hp} | ATK: ${STYLES[k].attack} | DEF: ${STYLES[k].defense}\n_${STYLES[k].desc}_`, 
-            inline: true 
-          });
-        });
-
-        const selectOptions = pageKeys.map(k => ({
-          label: STYLES[k].name,
-          value: k,
-          description: STYLES[k].desc
-        }));
-
-        const selectRow = new ActionRowBuilder().addComponents(
-          new StringSelectMenuBuilder()
-            .setCustomId(`select_style_p${page}`)
-            .setPlaceholder(`Select a Fighting Style (Page ${page})...`)
-            .addOptions(selectOptions)
-        );
-
-        const navRow = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('page_prev').setLabel('⬅️ Page 1').setStyle(ButtonStyle.Secondary).setDisabled(page === 1),
-          new ButtonBuilder().setCustomId('page_next').setLabel('Page 2 ➡️').setStyle(ButtonStyle.Secondary).setDisabled(page === 2)
-        );
-
-        return { embeds: [embed], components: [selectRow, navRow] };
-      }
-
-      await slotInteraction.update(buildStyleComponents(currentPage));
-
-      const styleCollector = mainMsg.createMessageComponentCollector({ time: 120000 });
-
-      styleCollector.on('collect', async (i) => {
-        if (i.user.id !== message.author.id) return;
-
-        if (i.isButton()) {
-          if (i.customId === 'page_prev') currentPage = 1;
-          if (i.customId === 'page_next') currentPage = 2;
-          return await i.update(buildStyleComponents(currentPage));
-        }
-
-        if (i.isStringSelect() && i.customId.startsWith('select_style_p')) {
-          const selectedKey = i.values[0];
-          const baseStyle = STYLES[selectedKey];
-
-          if (!baseStyle) return;
-
-          styleCollector.stop('selected');
-
-          // STEP 3: Prompt Custom Character Name Modal
-          const modal = new ModalBuilder()
-            .setCustomId('character_name_modal')
-            .setTitle('Name Your Character');
-
-          const nameInput = new TextInputBuilder()
-            .setCustomId('char_name')
-            .setLabel('Enter character name:')
-            .setStyle(TextInputStyle.Short)
-            .setPlaceholder(message.author.username)
-            .setMaxLength(25)
-            .setRequired(true);
-
-          modal.addComponents(new ActionRowBuilder().addComponents(nameInput));
-
-          await i.showModal(modal);
-
-          const modalSubmit = await i.awaitModalSubmit({
-            filter: (m) => m.customId === 'character_name_modal' && m.user.id === message.author.id,
-            time: 60000
-          }).catch(() => null);
-
-          if (!modalSubmit) {
-            return mainMsg.edit({
-              embeds: [new EmbedBuilder().setTitle('⏱️ Creation Timed Out').setDescription('Name entry timed out. Type `.create` to try again.').setColor('#95A5A6')],
-              components: []
-            }).catch(() => {});
-          }
-
-          const customName = modalSubmit.fields.getTextInputValue('char_name').trim() || message.author.username;
-
-          // STEP 4: Stat Point Allocation
-          let unspentPoints = 5;
-          let addedHp = 0;
-          let addedAtk = 0;
-          let addedDef = 0;
-
-          function renderAllocationEmbed() {
-            return new EmbedBuilder()
-              .setTitle(`📊 Stat Allocation: ${customName}`)
-              .setDescription(`Style: **${baseStyle.name}** | Slot: **${chosenSlot}**\nYou have **${unspentPoints}** point(s) remaining to distribute.`)
-              .addFields(
-                { name: '❤️ HP', value: `**${baseStyle.hp + addedHp}** (+${addedHp})`, inline: true },
-                { name: '⚔️ ATK', value: `**${baseStyle.attack + addedAtk}** (+${addedAtk})`, inline: true },
-                { name: '🛡️ DEF', value: `**${baseStyle.defense + addedDef}** (+${addedDef})`, inline: true }
-              )
-              .setColor('#3498DB');
-          }
-
-          function renderButtons() {
-            return new ActionRowBuilder().addComponents(
-              new ButtonBuilder().setCustomId('add_hp').setLabel('+10 HP').setStyle(ButtonStyle.Primary).setDisabled(unspentPoints <= 0),
-              new ButtonBuilder().setCustomId('add_atk').setLabel('+2 ATK').setStyle(ButtonStyle.Danger).setDisabled(unspentPoints <= 0),
-              new ButtonBuilder().setCustomId('add_def').setLabel('+1 DEF').setStyle(ButtonStyle.Secondary).setDisabled(unspentPoints <= 0),
-              new ButtonBuilder().setCustomId('finish').setLabel('Confirm Character').setStyle(ButtonStyle.Success)
-            );
-          }
-
-          await modalSubmit.update({ embeds: [renderAllocationEmbed()], components: [renderButtons()] });
-
-          const btnCollector = mainMsg.createMessageComponentCollector({ componentType: ComponentType.Button, time: 120000 });
-
-          btnCollector.on('collect', async (btn) => {
-            if (btn.user.id !== message.author.id) return;
-
-            if (btn.customId === 'add_hp' && unspentPoints > 0) { addedHp += 10; unspentPoints--; }
-            else if (btn.customId === 'add_atk' && unspentPoints > 0) { addedAtk += 2; unspentPoints--; }
-            else if (btn.customId === 'add_def' && unspentPoints > 0) { addedDef += 1; unspentPoints--; }
-            else if (btn.customId === 'finish') {
-              btnCollector.stop('completed');
-
-              const avatarUrl = message.author.displayAvatarURL({ extension: 'png', size: 256 });
-              const created = await Fighter.create({
-                userId: message.author.id,
-                slot: chosenSlot,
-                name: customName,
-                fightingStyle: baseStyle.name,
-                level: 1,
-                xp: 0,
-                statPoints: unspentPoints,
-                hp: baseStyle.hp + addedHp,
-                maxHp: baseStyle.hp + addedHp,
-                attack: baseStyle.attack + addedAtk,
-                defense: baseStyle.defense + addedDef,
-                balance: 100,
-                imageUrl: avatarUrl,
-                wins: 0,
-                losses: 0
-              });
-
-              const finalEmbed = new EmbedBuilder()
-                .setTitle(`🎉 Slot ${chosenSlot} Character Created!`)
-                .setThumbnail(avatarUrl)
-                .setDescription(`**${created.name}** the **${created.fightingStyle}** is ready for battle!`)
-                .addFields(
-                  { name: '❤️ HP', value: `${created.hp}`, inline: true },
-                  { name: '⚔️ ATK / 🛡️ DEF', value: `${created.attack} / ${created.defense}`, inline: true }
-                )
-                .setColor('#2ECC71');
-
-              return btn.update({ embeds: [finalEmbed], components: [] });
-            }
-
-            await btn.update({ embeds: [renderAllocationEmbed()], components: [renderButtons()] });
-          });
-
-          btnCollector.on('end', (collected, reason) => {
-            if (reason === 'time') {
-              mainMsg.edit({
-                embeds: [new EmbedBuilder().setTitle('⏱️ Creation Timed Out').setDescription('Stat distribution session timed out. Type `.create` to try again.').setColor('#95A5A6')],
-                components: []
-              }).catch(() => {});
-            }
-          });
-        }
-      });
-
-      styleCollector.on('end', (collected, reason) => {
-        if (reason === 'time') {
-          mainMsg.edit({
-            embeds: [new EmbedBuilder().setTitle('⏱️ Creation Timed Out').setDescription('Class selection session timed out. Type `.create` to try again.').setColor('#95A5A6')],
-            components: []
-          }).catch(() => {});
-        }
-      });
-    });
-
-    slotCollector.on('end', (collected, reason) => {
-      if (reason === 'time') {
-        mainMsg.edit({
+      if (!slotInteraction) {
+        return mainMsg.edit({
           embeds: [new EmbedBuilder().setTitle('⏱️ Creation Timed Out').setDescription('Slot selection session timed out. Type `.create` to try again.').setColor('#95A5A6')],
           components: []
         }).catch(() => {});
       }
-    });
+
+      // HANDLE DELETION
+      if (slotInteraction.customId.startsWith('delete_')) {
+        const deleteSlotNum = parseInt(slotInteraction.customId.split('_')[1]);
+        const targetChar = existingFighters.find(f => f.slot === deleteSlotNum);
+
+        if (!targetChar) {
+          await slotInteraction.reply({ content: `⚠️ No character found in **Slot ${deleteSlotNum}**!`, ephemeral: true });
+          continue;
+        }
+
+        // Deletion Confirmation Screen
+        const confirmEmbed = new EmbedBuilder()
+          .setTitle('⚠️ WARNING: Delete Character?')
+          .setDescription(`Are you sure you want to permanently delete **${targetChar.name}** (${targetChar.fightingStyle}) from **Slot ${deleteSlotNum}**?\n\n**This action cannot be undone!**`)
+          .setColor('#E74C3C');
+
+        const confirmRow = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId('confirm_delete').setLabel('Yes, Delete Permanentally').setStyle(ButtonStyle.Danger),
+          new ButtonBuilder().setCustomId('cancel_delete').setLabel('Cancel').setStyle(ButtonStyle.Secondary)
+        );
+
+        await slotInteraction.update({ embeds: [confirmEmbed], components: [confirmRow] });
+
+        const confirmInteraction = await mainMsg.awaitMessageComponent({
+          filter: (i) => i.user.id === message.author.id && ['confirm_delete', 'cancel_delete'].includes(i.customId),
+          time: 30000
+        }).catch(() => null);
+
+        if (confirmInteraction && confirmInteraction.customId === 'confirm_delete') {
+          await Fighter.deleteOne({ _id: targetChar._id });
+          existingFighters = existingFighters.filter(f => f.slot !== deleteSlotNum);
+
+          await confirmInteraction.update(buildSlotComponents());
+        } else {
+          // Cancelled or timed out confirmation
+          if (confirmInteraction) {
+            await confirmInteraction.update(buildSlotComponents());
+          } else {
+            await mainMsg.edit(buildSlotComponents()).catch(() => {});
+          }
+        }
+
+        continue;
+      }
+
+      // HANDLE SLOT SELECTION FOR CREATION
+      if (slotInteraction.customId.startsWith('slot_')) {
+        const selectedNum = parseInt(slotInteraction.customId.split('_')[1]);
+        const existingInSlot = existingFighters.find(f => f.slot === selectedNum);
+
+        if (existingInSlot) {
+          await slotInteraction.reply({ 
+            content: `⚠️ **Slot ${selectedNum}** is currently occupied by **${existingInSlot.name}**. Use the **Delete** button if you want to replace them.`, 
+            ephemeral: true 
+          });
+          continue;
+        }
+
+        chosenSlot = selectedNum;
+
+        // STEP 2: Paginated Class Selection Loop
+        let currentPage = 1;
+        let selectedStyleKey = null;
+        let styleInteraction = null;
+
+        function buildStyleComponents(page) {
+          const pageKeys = Object.keys(STYLES).filter(k => STYLES[k].page === page);
+
+          const embed = new EmbedBuilder()
+            .setTitle(`⚔️ Choose Fighting Style (Page ${page}/2)`)
+            .setDescription(`Select a class from Page ${page} using the dropdown menu below, or click arrows to flip pages.`)
+            .setColor('#9B59B6');
+
+          pageKeys.forEach(k => {
+            embed.addFields({ 
+              name: STYLES[k].name, 
+              value: `HP: ${STYLES[k].hp} | ATK: ${STYLES[k].attack} | DEF: ${STYLES[k].defense}\n_${STYLES[k].desc}_`, 
+              inline: true 
+            });
+          });
+
+          const selectOptions = pageKeys.map(k => ({
+            label: STYLES[k].name,
+            value: k,
+            description: STYLES[k].desc
+          }));
+
+          const selectRow = new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder()
+              .setCustomId(`select_style_p${page}`)
+              .setPlaceholder(`Select a Fighting Style (Page ${page})...`)
+              .addOptions(selectOptions)
+          );
+
+          const navRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('page_prev').setLabel('⬅️ Page 1').setStyle(ButtonStyle.Secondary).setDisabled(page === 1),
+            new ButtonBuilder().setCustomId('page_next').setLabel('Page 2 ➡️').setStyle(ButtonStyle.Secondary).setDisabled(page === 2)
+          );
+
+          return { embeds: [embed], components: [selectRow, navRow] };
+        }
+
+        await slotInteraction.update(buildStyleComponents(currentPage));
+
+        // Event Loop for Navigating Pages and Picking Class
+        while (!selectedStyleKey) {
+          const interaction = await mainMsg.awaitMessageComponent({
+            filter: (i) => i.user.id === message.author.id,
+            time: 120000
+          }).catch(() => null);
+
+          if (!interaction) {
+            return mainMsg.edit({
+              embeds: [new EmbedBuilder().setTitle('⏱️ Creation Timed Out').setDescription('Class selection session timed out. Type `.create` to try again.').setColor('#95A5A6')],
+              components: []
+            }).catch(() => {});
+          }
+
+          if (interaction.isButton()) {
+            if (interaction.customId === 'page_prev') currentPage = 1;
+            if (interaction.customId === 'page_next') currentPage = 2;
+            await interaction.update(buildStyleComponents(currentPage));
+          } else if (interaction.isStringSelect()) {
+            selectedStyleKey = interaction.values[0];
+            styleInteraction = interaction;
+          }
+        }
+
+        const baseStyle = STYLES[selectedStyleKey];
+
+        // STEP 3: Prompt Character Name Modal
+        const modalCustomId = `char_modal_${message.author.id}_${Date.now()}`;
+        const modal = new ModalBuilder()
+          .setCustomId(modalCustomId)
+          .setTitle('Name Your Character');
+
+        const nameInput = new TextInputBuilder()
+          .setCustomId('char_name')
+          .setLabel('Enter character name:')
+          .setStyle(TextInputStyle.Short)
+          .setPlaceholder(message.author.username)
+          .setMaxLength(25)
+          .setRequired(true);
+
+        modal.addComponents(new ActionRowBuilder().addComponents(nameInput));
+
+        await styleInteraction.showModal(modal);
+
+        const modalSubmit = await styleInteraction.awaitModalSubmit({
+          filter: (m) => m.customId === modalCustomId && m.user.id === message.author.id,
+          time: 60000
+        }).catch(() => null);
+
+        if (!modalSubmit) {
+          return mainMsg.edit({
+            embeds: [new EmbedBuilder().setTitle('⏱️ Creation Timed Out').setDescription('Name entry timed out. Type `.create` to try again.').setColor('#95A5A6')],
+            components: []
+          }).catch(() => {});
+        }
+
+        const customName = modalSubmit.fields.getTextInputValue('char_name').trim() || message.author.username;
+
+        // STEP 4: Stat Point Allocation
+        let unspentPoints = 5;
+        let addedHp = 0;
+        let addedAtk = 0;
+        let addedDef = 0;
+
+        function renderAllocationEmbed() {
+          return new EmbedBuilder()
+            .setTitle(`📊 Stat Allocation: ${customName}`)
+            .setDescription(`Style: **${baseStyle.name}** | Slot: **${chosenSlot}**\nYou have **${unspentPoints}** point(s) remaining to distribute.`)
+            .addFields(
+              { name: '❤️ HP', value: `**${baseStyle.hp + addedHp}** (+${addedHp})`, inline: true },
+              { name: '⚔️ ATK', value: `**${baseStyle.attack + addedAtk}** (+${addedAtk})`, inline: true },
+              { name: '🛡️ DEF', value: `**${baseStyle.defense + addedDef}** (+${addedDef})`, inline: true }
+            )
+            .setColor('#3498DB');
+        }
+
+        function renderButtons() {
+          return new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('add_hp').setLabel('+10 HP').setStyle(ButtonStyle.Primary).setDisabled(unspentPoints <= 0),
+            new ButtonBuilder().setCustomId('add_atk').setLabel('+2 ATK').setStyle(ButtonStyle.Danger).setDisabled(unspentPoints <= 0),
+            new ButtonBuilder().setCustomId('add_def').setLabel('+1 DEF').setStyle(ButtonStyle.Secondary).setDisabled(unspentPoints <= 0),
+            new ButtonBuilder().setCustomId('finish').setLabel('Confirm Character').setStyle(ButtonStyle.Success)
+          );
+        }
+
+        await modalSubmit.update({ embeds: [renderAllocationEmbed()], components: [renderButtons()] });
+
+        // Stat Point allocation Loop
+        let finished = false;
+
+        while (!finished) {
+          const btn = await mainMsg.awaitMessageComponent({
+            filter: (i) => i.user.id === message.author.id,
+            time: 120000
+          }).catch(() => null);
+
+          if (!btn) {
+            return mainMsg.edit({
+              embeds: [new EmbedBuilder().setTitle('⏱️ Creation Timed Out').setDescription('Stat allocation timed out. Type `.create` to try again.').setColor('#95A5A6')],
+              components: []
+            }).catch(() => {});
+          }
+
+          if (btn.customId === 'add_hp' && unspentPoints > 0) { addedHp += 10; unspentPoints--; }
+          else if (btn.customId === 'add_atk' && unspentPoints > 0) { addedAtk += 2; unspentPoints--; }
+          else if (btn.customId === 'add_def' && unspentPoints > 0) { addedDef += 1; unspentPoints--; }
+          else if (btn.customId === 'finish') {
+            finished = true;
+
+            const avatarUrl = message.author.displayAvatarURL({ extension: 'png', size: 256 });
+            const created = await Fighter.create({
+              userId: message.author.id,
+              slot: chosenSlot,
+              name: customName,
+              fightingStyle: baseStyle.name,
+              level: 1,
+              xp: 0,
+              statPoints: unspentPoints,
+              hp: baseStyle.hp + addedHp,
+              maxHp: baseStyle.hp + addedHp,
+              attack: baseStyle.attack + addedAtk,
+              defense: baseStyle.defense + addedDef,
+              balance: 100,
+              imageUrl: avatarUrl,
+              wins: 0,
+              losses: 0
+            });
+
+            const finalEmbed = new EmbedBuilder()
+              .setTitle(`🎉 Slot ${chosenSlot} Character Created!`)
+              .setThumbnail(avatarUrl)
+              .setDescription(`**${created.name}** the **${created.fightingStyle}** is ready for battle!`)
+              .addFields(
+                { name: '❤️ HP', value: `${created.hp}`, inline: true },
+                { name: '⚔️ ATK / 🛡️ DEF', value: `${created.attack} / ${created.defense}`, inline: true }
+              )
+              .setColor('#2ECC71');
+
+            return await btn.update({ embeds: [finalEmbed], components: [] });
+          }
+
+          await btn.update({ embeds: [renderAllocationEmbed()], components: [renderButtons()] });
+        }
+      }
+    }
   }
 };

@@ -15,7 +15,9 @@ const fighterSchema = new mongoose.Schema({
   balance: { type: Number, required: true, default: 100 },
   imageUrl: { type: String, required: true },
   wins: { type: Number, required: true, default: 0 },
-  losses: { type: Number, required: true, default: 0 }
+  losses: { type: Number, required: true, default: 0 },
+  winStreak: { type: Number, required: true, default: 0 },
+  bestStreak: { type: Number, required: true, default: 0 }
 }, { timestamps: true });
 
 fighterSchema.index({ userId: 1, slot: 1 }, { unique: true });

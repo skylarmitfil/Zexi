@@ -120,4 +120,16 @@ process.on('unhandledRejection', error => {
   console.error('Unhandled Promise Rejection:', error);
 });
 
+process.on('uncaughtException', error => {
+  console.error('Uncaught Exception (kept alive):', error);
+});
+
+client.on(Events.Error, error => {
+  console.error('Discord Client Error (kept alive):', error);
+});
+
+client.on('shardError', error => {
+  console.error('WebSocket Shard Error (kept alive):', error);
+});
+
 bootstrap();

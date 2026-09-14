@@ -1,5 +1,6 @@
 const { EmbedBuilder } = require('discord.js');
 const Fighter = require('../models/Fighter');
+const { getClass } = require('../utils/combat');
 
 module.exports = {
   name: 'customize',
@@ -47,15 +48,19 @@ module.exports = {
       return message.channel.send(`Upgraded **${stat.toUpperCase()}**! Points remaining: **${fighter.statPoints}**`);
     }
 
+    const cls = getClass(fighter.fightingStyle);
     const embed = new EmbedBuilder()
       .setTitle(`⚔️ ${fighter.name}'s Fighter Profile`)
       .setThumbnail(fighter.imageUrl)
       .setColor('#5865F2')
       .addFields(
+        { name: 'Class', value: `${cls.name}`, inline: true },
         { name: 'Level', value: `${fighter.level} (${fighter.xp}/${fighter.level * 50} XP)`, inline: true },
-        { name: 'Stat Points Available', value: `${fighter.statPoints}`, inline: true },
+        { name: 'Stat Points', value: `${fighter.statPoints}`, inline: true },
         { name: 'Stats', value: `❤️ HP: **${fighter.maxHp}**\n⚔️ ATK: **${fighter.attack}**\n🛡️ DEF: **${fighter.defense}**`, inline: false },
-        { name: 'Unlocked Moves', value: `${fighter.level >= 1 ? '✅ Quick Strike (Lvl 1)\n' : ''}${fighter.level >= 3 ? '✅ Heavy Slam (Lvl 3)\n' : '🔒 Heavy Slam (Requires Lvl 3)\n'}${fighter.level >= 5 ? '✅ Ultimate Burst (Lvl 5)\n' : '🔒 Ultimate Burst (Requires Lvl 5)'}`, inline: false }
+        { name: 'Record', value: `🏆 ${fighter.wins}W / ${fighter.losses}L · 🔥 Streak ${fighter.winStreak || 0} (Best ${fighter.bestStreak || 0})`, inline: false },
+        { name: '🧬 Passive', value: cls.passive, inline: false },
+        { name: `🌟 Special: ${cls.special.name} (${cls.special.cost}⚡)`, value: cls.special.desc, inline: false }
       );
 
     return message.channel.send({ embeds: [embed] });

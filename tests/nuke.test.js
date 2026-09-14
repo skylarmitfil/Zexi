@@ -54,10 +54,31 @@ function jestlike(fn) {
   return spy;
 }
 
-function makeMessage({ hasGuild = true, memberPerms = [], botPerms = [PermissionsBitField.Flags.ManageChannels], channelOpts = {} } = {}) {
+// Builds a confirmation prompt mock. `confirm` = 'confirm' | 'cancel' | 'timeout'.
+function makePrompt(confirm) {
+  const interaction = {
+    customId: confirm === 'cancel' ? 'nuke_cancel' : 'nuke_confirm',
+    user: { id: 'user1' },
+    update: jestlike(async () => ({})),
+    deferUpdate: jestlike(async () => ({})),
+  };
+  const prompt = {
+    _interaction: interaction,
+    edit: jestlike(async () => ({})),
+    awaitMessageComponent: async () => {
+      if (confirm === 'timeout') throw new Error('timeout');
+      return interaction;
+    },
+  };
+  return prompt;
+}
+
+function makeMessage({ hasGuild = true, memberPerms = [], botPerms = [PermissionsBitField.Flags.ManageChannels], channelOpts = {}, confirm = 'confirm' } = {}) {
   const replySpy = jestlike(async () => ({}));
   const authorSendSpy = jestlike(async () => ({}));
   const channel = makeChannel(channelOpts);
+  const prompt = makePrompt(confirm);
+  channel.send = jestlike(async () => prompt); // channel.send returns the confirmation prompt
   const msg = {
     guild: hasGuild ? {
       id: 'guild1',
@@ -67,6 +88,7 @@ function makeMessage({ hasGuild = true, memberPerms = [], botPerms = [Permission
     author: { id: 'user1', tag: 'User#0001', send: authorSendSpy },
     channel,
     reply: replySpy,
+    _prompt: prompt,
   };
   return msg;
 }
@@ -132,19 +154,22 @@ async function run() {
     assert(m.channel.clone.calls.length === 0, 'voice channel not cloned');
   }
 
-  // 7. Happy path — GuildText
+  // 7. Happy path — GuildText (with confirmation)
   {
-    const m = makeMessage({ memberPerms: [F.Administrator, F.ManageMessages] });
+    const m = makeMessage({ memberPerms: [F.Administrator, F.ManageMessages], confirm: 'confirm' });
     await nuke.execute(m, []);
+    assert(m.channel.send.calls.length === 1, 'happy path: confirmation prompt sent');
     assert(m.channel.clone.calls.length === 1, 'happy path: clone called once');
     assert(m.channel.delete.calls.length === 1, 'happy path: delete called once');
     assert(m.channel._cloned.send.calls.length === 1, 'happy path: cloned.send called once');
+    assert(m._prompt._interaction.deferUpdate.calls.length === 1, 'happy path: interaction deferUpdate called');
     const cloneTs = m.channel.clone.calls[0].ts;
     const deleteTs = m.channel.delete.calls[0].ts;
     assert(cloneTs < deleteTs, 'happy path: clone called BEFORE delete');
-    // Verify embed passed
     const sendArgs = m.channel._cloned.send.calls[0].args[0];
     assert(sendArgs && Array.isArray(sendArgs.embeds) && sendArgs.embeds.length === 1, 'happy path: cloned.send received an embed');
+    const img = sendArgs.embeds[0].data && sendArgs.embeds[0].data.image && sendArgs.embeds[0].data.image.url;
+    assert(typeof img === 'string' && img.endsWith('giphy.gif'), 'happy path: embed uses an animated .gif', img);
     assert(m.reply.calls.length === 0, 'happy path: no denial reply issued');
   }
 
@@ -154,6 +179,25 @@ async function run() {
     await nuke.execute(m, []);
     assert(m.channel.clone.calls.length === 1, 'announcement channel: clone called');
     assert(m.channel.delete.calls.length === 1, 'announcement channel: delete called');
+  }
+
+  // 9. Cancel button — must NOT nuke
+  {
+    const m = makeMessage({ memberPerms: [F.Administrator, F.ManageMessages], confirm: 'cancel' });
+    await nuke.execute(m, []);
+    assert(m.channel.send.calls.length === 1, 'cancel: confirmation prompt sent');
+    assert(m.channel.clone.calls.length === 0, 'cancel: did NOT clone');
+    assert(m.channel.delete.calls.length === 0, 'cancel: did NOT delete');
+    assert(m._prompt._interaction.update.calls.length === 1, 'cancel: interaction.update called to show cancelled');
+  }
+
+  // 10. Timeout (no response) — must NOT nuke
+  {
+    const m = makeMessage({ memberPerms: [F.Administrator, F.ManageMessages], confirm: 'timeout' });
+    await nuke.execute(m, []);
+    assert(m.channel.clone.calls.length === 0, 'timeout: did NOT clone');
+    assert(m.channel.delete.calls.length === 0, 'timeout: did NOT delete');
+    assert(m._prompt.edit.calls.length === 1, 'timeout: prompt edited to timed-out message');
   }
 
   console.log('\n===== TEST RESULTS =====');

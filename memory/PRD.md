@@ -1,52 +1,49 @@
 # Zexi — Discord Combat RPG Bot
 
 ## Overview
-A Discord.js (v14) message-command bot with a MongoDB (Mongoose) backend. Players create
-class-based fighters, duel in PvP, and team up for co-op raids. Runs on Railway.
+Discord.js (v14) message-command bot with MongoDB (Mongoose). Players create class-based
+fighters, equip move loadouts, duel in PvP, and team up for co-op raids. Runs on Railway.
+Prefix commands (default `,`). Entry: `index.js` → `commandHandler.js` loads `/commands/*.js`.
 
-## Stack
-- discord.js v14, Node.js, Mongoose/MongoDB (Railway)
-- Prefix commands (default `,`), per-guild prefix stored in Guild model
-- Entry: `index.js` → `commandHandler.js` loads `/commands/*.js`
-
-## Core Models
-- **Fighter**: userId, slot (1-2), name, fightingStyle, level, xp, statPoints, hp, maxHp,
-  attack, defense, balance, imageUrl, wins, losses, **winStreak, bestStreak**
+## Models
+- **Fighter**: userId, slot, name, fightingStyle, level, xp, statPoints, hp, maxHp, attack,
+  defense, balance, imageUrl, wins, losses, winStreak, bestStreak, **unlockedMoves[]**, **loadout[]**
 - **Inventory**: potions, equippedWeapon/Armor, weaponsOwned[], armorOwned[]
 - **Guild**: per-guild prefix
 
-## Combat Engine — `utils/combat.js` (shared by PvP + Raid)
-- 12 classes, each with a **passive** and an energy-fueled **Special/ultimate**
-- **Status effects**: poison, bleed, stun, shield, regen, attack_up, evasion
-- **Energy** meter (0-100) charges from actions; Specials cost energy
-- Passives: Berserker bloodlust, Guardian 20% reduction, Assassin +crit, Monk/Druid regen,
-  Mage defense-pierce, Paladin block, Necromancer leech, Samurai counter, Ninja evasion,
-  Bard +energy, Valkyrie crit-heal
-- Progression helper `applyXpAndLevel` (level = statPoints +2, +stats, full heal)
+## Shared modules
+- `utils/classData.js` — single source of truth for the 12 classes' base stats (rebalanced).
+- `utils/combat.js` — engine: passives, energy, status effects (poison/bleed/stun/shield/regen/
+  attack_up/**attack_down (weaken)**/evasion), `performAttack`, `performGuard` (Block = no damage),
+  `performSpecial` (signature), and generic `performMove(attacker, defender, move)`.
+- `utils/moves.js` — 33 moves per class (1 starter + 16 level-unlock + signature + 15 shop),
+  themed names (adjective×root), shared balanced templates, unlock/loadout helpers.
 
 ## Implemented (2026-06)
-- **Fixed bot-wide crash**: `commands.find` on a Map → `[...commands.values()].find` (index.js:42).
-  Any alias/typo previously crashed the whole process.
-- **Global crash-guard**: process `uncaughtException`, client `error`/`shardError` handlers.
-- **PvP overhaul** (`pvp.js`): 5 actions (Attack/Special/Heal/Guard/Forfeit), energy + status
-  UI bars, class passives/specials, streaks + escalating gold, XP + level-up, forfeit rewards.
-  Fixed maxHp bug (health bar now uses true max HP). Escalating "arena" sudden-death damage
-  after turn 20 guarantees every duel resolves (verified: 144/144 matchups end, longest 51 turns).
-- **Raid overhaul** (`raid.js`): 4 rotating bosses with unique attacks (single/AoE/status),
-  enrage phase at <30% HP, player Specials/energy/statuses in co-op, boss can be stunned,
-  loot table (coins + XP + potions + chance of weapon/armor into Inventory).
-- **Leaderboard** (`leaderboard.js`, aliases lb/top/rankings): rank by wins | streak | gold.
-- **Customize profile** now shows class passive + special + streak record.
+- Fixed bot-wide crash (`commands.find` on a Map) + global crash-guard.
+- Combat overhaul: class passives, energy specials, full status effects.
+- PvP: streaks + escalating gold, XP/level-up, sudden-death arena damage, Potion action.
+- Raids: 4 rotating bosses (unique attacks + enrage), co-op specials, loot table.
+- Leaderboard (`,leaderboard`).
+- **Move/loadout system + class rebalance (this session):**
+  - `,moveshop` (aliases attackshop/abilities/learn): buy attacks with gold + level gate, per-character.
+  - `,moves` (aliases loadout/movelist/equip): equip up to 5 moves from your unlocked pool.
+  - Battle UIs (PvP + Raid) now expose core buttons (Attack/Block/Potion/Forfeit or
+    Strike/Special/Heal/Potion/Guard) plus a move select-menu for the equipped loadout.
+  - Block deals **no damage** to either side (pure mitigation).
+  - Auto-balanced all 12 classes: win-rate spread cut from ~85 pts (2.8%–88%) to ~8.5 pts
+    (46%–55%) via simulation. Weaker classes (Guardian/Berserker/Necromancer/Valkyrie) then
+    given small buffs. Base stats live in `utils/classData.js`; passives in `utils/combat.js`.
+  - Backward compatible: pre-existing characters (empty loadout) fall back to the starter move.
 
 ## Verification
-- `node -c` on all files, command loader, and a full simulated tournament of all 12x12
-  class matchups (no crashes, no infinite stalemates). Live Discord interaction testing
-  requires the deployed bot + DISCORD_TOKEN (Railway).
+- `node -c` + command loader on all 12 commands; move pool sizes (33/class) and unlock gating;
+  balance tournaments (1000+ games/pair); move-based duel simulation. Live Discord button/menu
+  flows require the deployed bot + DISCORD_TOKEN (Railway).
 
 ## Backlog / Next
-- P1: Use owned potions as an in-battle action (Inventory already tracks them).
-- P1: Equipment stat bonuses reflected in combat (weapon/armor from raid loot).
-- P2: 1v1 matchmaking / tournament bracket command.
-- P2: Boss mechanics telegraph (show next boss move).
+- P1: Equipment stat bonuses (weapon/armor from raid loot) reflected in combat.
+- P1: Boss move telegraph (show next boss action).
+- P2: Tournament bracket command; per-class move flavor text.
 - Pre-existing (not combat): `customize`/`shop`/`balance` call `Fighter.create({userId,name})`
-  which fails schema validation if user has no character — should direct to `,create` instead.
+  which fails schema validation if the user has no character — should direct to `,create`.

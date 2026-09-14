@@ -1,6 +1,7 @@
 const { EmbedBuilder } = require('discord.js');
 const Fighter = require('../models/Fighter');
 const { getClass } = require('../utils/combat');
+const { unlockedMoves, getClassMoves } = require('../utils/moves');
 
 module.exports = {
   name: 'customize',
@@ -60,7 +61,9 @@ module.exports = {
         { name: 'Stats', value: `❤️ HP: **${fighter.maxHp}**\n⚔️ ATK: **${fighter.attack}**\n🛡️ DEF: **${fighter.defense}**`, inline: false },
         { name: 'Record', value: `🏆 ${fighter.wins}W / ${fighter.losses}L · 🔥 Streak ${fighter.winStreak || 0} (Best ${fighter.bestStreak || 0})`, inline: false },
         { name: '🧬 Passive', value: cls.passive, inline: false },
-        { name: `🌟 Special: ${cls.special.name} (${cls.special.cost}⚡)`, value: cls.special.desc, inline: false }
+        { name: `🌟 Special: ${cls.special.name} (${cls.special.cost}⚡)`, value: cls.special.desc, inline: false },
+        { name: `🎯 Equipped Moves (${(fighter.loadout || []).length})`, value: (fighter.loadout || []).map(id => { const m = getClassMoves(fighter.fightingStyle).find(x => x.id === id); return m ? `• ${m.name}` : null; }).filter(Boolean).join('\n') || '_None — set with `,moves`_', inline: true },
+        { name: '🔓 Moves Unlocked', value: `${unlockedMoves(fighter).length} available\nBuy more with \`,moveshop\``, inline: true }
       );
 
     return message.channel.send({ embeds: [embed] });

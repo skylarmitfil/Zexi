@@ -17,7 +17,9 @@ const fighterSchema = new mongoose.Schema({
   wins: { type: Number, required: true, default: 0 },
   losses: { type: Number, required: true, default: 0 },
   winStreak: { type: Number, required: true, default: 0 },
-  bestStreak: { type: Number, required: true, default: 0 }
+  bestStreak: { type: Number, required: true, default: 0 },
+  unlockedMoves: { type: [String], default: [] },
+  loadout: { type: [String], default: [] }
 }, { timestamps: true });
 
 fighterSchema.index({ userId: 1, slot: 1 }, { unique: true });

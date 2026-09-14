@@ -9,21 +9,7 @@ const {
   TextInputStyle
 } = require('discord.js');
 const Fighter = require('../models/Fighter');
-
-const STYLES = {
-  berserker: { name: 'Berserker', hp: 110, attack: 22, defense: 3, desc: 'Heavy physical damage attacker.', page: 1 },
-  guardian: { name: 'Guardian', hp: 140, attack: 12, defense: 12, desc: 'Tanky build built to absorb hits.', page: 1 },
-  assassin: { name: 'Assassin', hp: 85, attack: 26, defense: 2, desc: 'High crit rate glass cannon.', page: 1 },
-  monk: { name: 'Monk', hp: 120, attack: 16, defense: 8, desc: 'Balanced stats with high sustain.', page: 1 },
-  mage: { name: 'Mage', hp: 95, attack: 24, defense: 4, desc: 'Burst caster that ignores defense.', page: 1 },
-  paladin: { name: 'Paladin', hp: 130, attack: 14, defense: 10, desc: 'Holy defender with strong shields.', page: 1 },
-  necromancer: { name: 'Necromancer', hp: 90, attack: 25, defense: 3, desc: 'Drains enemy vitality to heal.', page: 2 },
-  samurai: { name: 'Samurai', hp: 105, attack: 23, defense: 5, desc: 'Master of counter-attacks.', page: 2 },
-  druid: { name: 'Druid', hp: 125, attack: 15, defense: 9, desc: 'Nature warrior with regeneration.', page: 2 },
-  ninja: { name: 'Ninja', hp: 80, attack: 27, defense: 1, desc: 'Extreme speed and evasion.', page: 2 },
-  bard: { name: 'Bard', hp: 100, attack: 18, defense: 6, desc: 'Buffs stats and manipulates turns.', page: 2 },
-  valkyrie: { name: 'Valkyrie', hp: 115, attack: 20, defense: 7, desc: 'Balanced aerial warrior.', page: 2 }
-};
+const { BASE_STYLES: STYLES } = require('../utils/classData');
 
 module.exports = {
   name: 'create',
@@ -300,7 +286,9 @@ module.exports = {
               balance: 100,
               imageUrl: avatarUrl,
               wins: 0,
-              losses: 0
+              losses: 0,
+              unlockedMoves: [],
+              loadout: [`${selectedStyleKey}_0`]
             });
 
             const finalEmbed = new EmbedBuilder()
@@ -309,7 +297,8 @@ module.exports = {
               .setDescription(`**${created.name}** the **${created.fightingStyle}** is ready for battle!`)
               .addFields(
                 { name: '❤️ HP', value: `${created.hp}`, inline: true },
-                { name: '⚔️ ATK / 🛡️ DEF', value: `${created.attack} / ${created.defense}`, inline: true }
+                { name: '⚔️ ATK / 🛡️ DEF', value: `${created.attack} / ${created.defense}`, inline: true },
+                { name: '🎯 Starter Kit', value: 'You start with a basic Attack, Block, and one starter move. Unlock more by leveling up (`,moves`) or buying them (`,moveshop`).', inline: false }
               )
               .setColor('#2ECC71');
 

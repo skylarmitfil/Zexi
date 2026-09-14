@@ -14,6 +14,7 @@ const {
   performAttack,
   performSpecial,
   performGuard,
+  performMove,
   healRaw,
   gainEnergy,
   addStatus,
@@ -23,8 +24,17 @@ const {
   statusSummary,
   applyXpAndLevel
 } = require('../utils/combat');
+const { getClassMoves } = require('../utils/moves');
+const { StringSelectMenuBuilder } = require('discord.js');
 
 const POTION_HEAL = 30;
+
+function resolveLoadout(doc) {
+  const pool = getClassMoves(doc.fightingStyle);
+  let moves = (doc.loadout || []).map(id => pool.find(m => m.id === id)).filter(Boolean);
+  if (!moves.length) moves = [pool[0]];
+  return moves;
+}
 
 // Rotating boss roster — each has unique attacks and an enrage move.
 const BOSSES = [
@@ -92,7 +102,7 @@ module.exports = {
 
     const party = new Map();
     const leaderInv = await Inventory.findOne({ userId: message.author.id });
-    party.set(message.author.id, createCombatant(leaderFighter, { potions: leaderInv ? leaderInv.potions : 0 }));
+    party.set(message.author.id, createCombatant(leaderFighter, { potions: leaderInv ? leaderInv.potions : 0, moves: resolveLoadout(leaderFighter) }));
 
     function renderLobbyEmbed() {
       const partyList = Array.from(party.values())
@@ -121,7 +131,7 @@ module.exports = {
         const memberDoc = await Fighter.findOne({ userId: i.user.id });
         if (!memberDoc) return i.reply({ content: 'You need a character to join! Type `,create` first.', ephemeral: true });
         const memberInv = await Inventory.findOne({ userId: i.user.id });
-        party.set(i.user.id, createCombatant(memberDoc, { potions: memberInv ? memberInv.potions : 0 }));
+        party.set(i.user.id, createCombatant(memberDoc, { potions: memberInv ? memberInv.potions : 0, moves: resolveLoadout(memberDoc) }));
         await i.update({ embeds: [renderLobbyEmbed()], components: [lobbyRow] });
       }
 
@@ -169,20 +179,34 @@ async function startCoopBattle(message, party, boss, mainMsg) {
       .setColor(boss.color);
   }
 
-  function buildRow() {
+  function buildComponents() {
     const active = getActivePlayer();
     const activeClass = getClass(active.style);
-    return new ActionRowBuilder().addComponents(
+    const btnRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('raid_attack').setLabel('Strike Boss').setEmoji('⚔️').setStyle(ButtonStyle.Danger),
       new ButtonBuilder().setCustomId('raid_special').setLabel('Special').setEmoji('🌟').setStyle(ButtonStyle.Primary).setDisabled(active.energy < activeClass.special.cost),
       new ButtonBuilder().setCustomId('raid_heal').setLabel('Heal Party').setEmoji('✨').setStyle(ButtonStyle.Success),
       new ButtonBuilder().setCustomId('raid_potion').setLabel(`Potion (${active.potions})`).setEmoji('🧪').setStyle(ButtonStyle.Success).setDisabled(active.potions <= 0),
       new ButtonBuilder().setCustomId('raid_guard').setLabel('Guard').setEmoji('🛡️').setStyle(ButtonStyle.Secondary)
     );
+    const rows = [btnRow];
+    const moves = (active.moves || []).filter(m => m.kind !== 'signature');
+    if (moves.length) {
+      const menu = new StringSelectMenuBuilder()
+        .setCustomId('raid_move')
+        .setPlaceholder(`${active.name}'s Moves — pick one`)
+        .addOptions(moves.slice(0, 25).map(m => ({
+          label: `${m.name}${m.energyCost ? ` (${m.energyCost}⚡)` : ''}`.slice(0, 100),
+          value: m.id,
+          description: (m.power ? m.power.toFixed(2) + 'x ATK' : 'utility').slice(0, 100)
+        })));
+      rows.push(new ActionRowBuilder().addComponents(menu));
+    }
+    return rows;
   }
 
-  await mainMsg.edit({ content: '', embeds: [renderBattleEmbed()], components: [buildRow()] });
-  const battleCollector = mainMsg.createMessageComponentCollector({ componentType: ComponentType.Button, time: 300000 });
+  await mainMsg.edit({ content: '', embeds: [renderBattleEmbed()], components: buildComponents() });
+  const battleCollector = mainMsg.createMessageComponentCollector({ time: 300000 });
 
   async function awardVictory(i) {
     battleCollector.stop('boss_defeated');
@@ -229,6 +253,13 @@ async function startCoopBattle(message, party, boss, mainMsg) {
     if (i.customId === 'raid_potion' && currentPlayer.potions <= 0) {
       return i.reply({ content: '⚠️ You have no Health Potions! Buy some with `,shop`.', ephemeral: true });
     }
+    let selectedMove = null;
+    if (i.isStringSelectMenu && i.isStringSelectMenu() && i.customId === 'raid_move') {
+      selectedMove = (currentPlayer.moves || []).find(m => m.id === i.values[0]);
+      if (selectedMove && (selectedMove.energyCost || 0) > currentPlayer.energy) {
+        return i.reply({ content: `⚡ Not enough energy for **${selectedMove.name}** (needs ${selectedMove.energyCost}, have ${currentPlayer.energy}).`, ephemeral: true });
+      }
+    }
 
     let actionLines = [];
 
@@ -244,6 +275,10 @@ async function startCoopBattle(message, party, boss, mainMsg) {
         actionLines.push(...performAttack(currentPlayer, boss).logs);
       } else if (i.customId === 'raid_special') {
         const res = performSpecial(currentPlayer, boss);
+        if (res.failed) return i.reply({ content: res.logs.join('\n'), ephemeral: true });
+        actionLines.push(...res.logs);
+      } else if (selectedMove) {
+        const res = performMove(currentPlayer, boss, selectedMove);
         if (res.failed) return i.reply({ content: res.logs.join('\n'), ephemeral: true });
         actionLines.push(...res.logs);
       } else if (i.customId === 'raid_heal') {
@@ -324,7 +359,7 @@ async function startCoopBattle(message, party, boss, mainMsg) {
     }
 
     combatLog = actionLines.join('\n') || '...';
-    await i.update({ content: '', embeds: [renderBattleEmbed()], components: [buildRow()] });
+    await i.update({ content: '', embeds: [renderBattleEmbed()], components: buildComponents() });
   });
 
   battleCollector.on('end', (collected, reason) => {

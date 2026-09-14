@@ -1,17 +1,8 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } = require('discord.js');
 const Fighter = require('../models/Fighter');
+const { baseOf } = require('../utils/classData');
 
 const RESET_COST = 1000; // Price in coins to reset stats
-
-// Base archetype stats reference
-const BASE_STYLES = {
-  Berserker: { hp: 110, attack: 22, defense: 3 },
-  Guardian: { hp: 140, attack: 12, defense: 12 },
-  Assassin: { hp: 85, attack: 26, defense: 2 },
-  Monk: { hp: 120, attack: 16, defense: 8 },
-  Mage: { hp: 95, attack: 24, defense: 4 },
-  Paladin: { hp: 130, attack: 14, defense: 10 }
-};
 
 module.exports = {
   name: 'resetstats',
@@ -27,7 +18,7 @@ module.exports = {
       return message.channel.send(`❌ You need **${RESET_COST} coins** to reset your stats. You currently have **${fighter.balance || 0} coins**.`);
     }
 
-    const base = BASE_STYLES[fighter.fightingStyle] || BASE_STYLES.Berserker;
+    const base = baseOf(fighter.fightingStyle);
 
     // Calculate total points earned beyond base stats:
     // 5 initial creation points + 2 points per level gained (level 1 = 0 level points)

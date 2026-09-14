@@ -15,6 +15,7 @@ const {
   performSpecial,
   performGuard,
   healRaw,
+  gainEnergy,
   addStatus,
   applyDamage,
   renderHealthBar,
@@ -22,6 +23,8 @@ const {
   statusSummary,
   applyXpAndLevel
 } = require('../utils/combat');
+
+const POTION_HEAL = 30;
 
 // Rotating boss roster — each has unique attacks and an enrage move.
 const BOSSES = [
@@ -88,7 +91,8 @@ module.exports = {
     };
 
     const party = new Map();
-    party.set(message.author.id, createCombatant(leaderFighter));
+    const leaderInv = await Inventory.findOne({ userId: message.author.id });
+    party.set(message.author.id, createCombatant(leaderFighter, { potions: leaderInv ? leaderInv.potions : 0 }));
 
     function renderLobbyEmbed() {
       const partyList = Array.from(party.values())
@@ -116,7 +120,8 @@ module.exports = {
         if (party.size >= 4) return i.reply({ content: 'The raid party is full (Max 4 players)!', ephemeral: true });
         const memberDoc = await Fighter.findOne({ userId: i.user.id });
         if (!memberDoc) return i.reply({ content: 'You need a character to join! Type `,create` first.', ephemeral: true });
-        party.set(i.user.id, createCombatant(memberDoc));
+        const memberInv = await Inventory.findOne({ userId: i.user.id });
+        party.set(i.user.id, createCombatant(memberDoc, { potions: memberInv ? memberInv.potions : 0 }));
         await i.update({ embeds: [renderLobbyEmbed()], components: [lobbyRow] });
       }
 
@@ -171,6 +176,7 @@ async function startCoopBattle(message, party, boss, mainMsg) {
       new ButtonBuilder().setCustomId('raid_attack').setLabel('Strike Boss').setEmoji('⚔️').setStyle(ButtonStyle.Danger),
       new ButtonBuilder().setCustomId('raid_special').setLabel('Special').setEmoji('🌟').setStyle(ButtonStyle.Primary).setDisabled(active.energy < activeClass.special.cost),
       new ButtonBuilder().setCustomId('raid_heal').setLabel('Heal Party').setEmoji('✨').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId('raid_potion').setLabel(`Potion (${active.potions})`).setEmoji('🧪').setStyle(ButtonStyle.Success).setDisabled(active.potions <= 0),
       new ButtonBuilder().setCustomId('raid_guard').setLabel('Guard').setEmoji('🛡️').setStyle(ButtonStyle.Secondary)
     );
   }
@@ -220,6 +226,9 @@ async function startCoopBattle(message, party, boss, mainMsg) {
     if (i.user.id !== currentPlayer.userId) {
       return i.reply({ content: `It's not your turn! Waiting for <@${currentPlayer.userId}>.`, ephemeral: true });
     }
+    if (i.customId === 'raid_potion' && currentPlayer.potions <= 0) {
+      return i.reply({ content: '⚠️ You have no Health Potions! Buy some with `,shop`.', ephemeral: true });
+    }
 
     let actionLines = [];
 
@@ -241,6 +250,12 @@ async function startCoopBattle(message, party, boss, mainMsg) {
         party.forEach(p => { if (p.isAlive) healRaw(p, 25); });
         currentPlayer.energy = Math.min(currentPlayer.maxEnergy, currentPlayer.energy + 15);
         actionLines.push(`✨ **${currentPlayer.name}** healed all living party members for **25 HP**!`);
+      } else if (i.customId === 'raid_potion') {
+        currentPlayer.potions -= 1;
+        await Inventory.updateOne({ userId: currentPlayer.userId }, { $inc: { potions: -1 } });
+        const healed = healRaw(currentPlayer, POTION_HEAL);
+        gainEnergy(currentPlayer, 10);
+        actionLines.push(`🧪 **${currentPlayer.name}** drank a Health Potion and restored **${healed}** HP! (${currentPlayer.potions} left)`);
       } else if (i.customId === 'raid_guard') {
         actionLines.push(...performGuard(currentPlayer).logs);
       }

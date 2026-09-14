@@ -5,6 +5,7 @@ const {
   ButtonStyle
 } = require('discord.js');
 const Fighter = require('../models/Fighter');
+const Inventory = require('../models/Inventory');
 const {
   getClass,
   createCombatant,
@@ -16,8 +17,12 @@ const {
   renderHealthBar,
   renderEnergyBar,
   statusSummary,
-  applyXpAndLevel
+  applyXpAndLevel,
+  healRaw,
+  gainEnergy
 } = require('../utils/combat');
+
+const POTION_HEAL = 30;
 
 module.exports = {
   name: 'pvp',
@@ -78,6 +83,10 @@ module.exports = {
     // Combatants (true maxHp — fixes prior current-HP-as-maxHp bug)
     const fighter1 = createCombatant(p1Doc);
     const fighter2 = createCombatant(p2Doc);
+    const inv1 = await Inventory.findOne({ userId: message.author.id });
+    const inv2 = await Inventory.findOne({ userId: opponentUser.id });
+    fighter1.potions = inv1 ? inv1.potions : 0;
+    fighter2.potions = inv2 ? inv2.potions : 0;
     const class1 = getClass(fighter1.style);
     const class2 = getClass(fighter2.style);
 
@@ -149,10 +158,13 @@ module.exports = {
         new ButtonBuilder().setCustomId('btn_special').setLabel('Special').setEmoji('🌟').setStyle(ButtonStyle.Primary).setDisabled(!canSpecial),
         new ButtonBuilder().setCustomId('btn_heal').setLabel('Heal').setEmoji('✨').setStyle(ButtonStyle.Success),
         new ButtonBuilder().setCustomId('btn_guard').setLabel('Guard').setEmoji('🛡️').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('btn_potion').setLabel(`Potion (${active.potions})`).setEmoji('🧪').setStyle(ButtonStyle.Success).setDisabled(active.potions <= 0)
+      );
+      const utilityRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('btn_forfeit').setLabel('Forfeit').setEmoji('🏳️').setStyle(ButtonStyle.Secondary)
       );
 
-      return { content: `<@${activePlayer}>`, embeds: [battleEmbed], components: [actionRow] };
+      return { content: `<@${activePlayer}>`, embeds: [battleEmbed], components: [actionRow, utilityRow] };
     }
 
     async function finishBattle(winnerDoc, loserDoc, winnerUser, loserUser, interaction, finalLog) {
@@ -233,6 +245,12 @@ module.exports = {
         });
       }
 
+      // Potion action needs at least one potion, but doesn't consume the turn if empty
+      if (interaction.customId === 'btn_potion' && attacker.potions <= 0) {
+        await interaction.reply({ content: '⚠️ You have no Health Potions! Buy some with `,shop`.', ephemeral: true });
+        continue;
+      }
+
       // Start-of-turn effects
       const tick = tickStatuses(attacker);
       const logParts = [...tick.logs];
@@ -257,6 +275,13 @@ module.exports = {
         else if (interaction.customId === 'btn_special') result = performSpecial(attacker, defender);
         else if (interaction.customId === 'btn_heal') result = performHeal(attacker, defender);
         else if (interaction.customId === 'btn_guard') result = performGuard(attacker);
+        else if (interaction.customId === 'btn_potion') {
+          attacker.potions -= 1;
+          await Inventory.updateOne({ userId: attacker.userId }, { $inc: { potions: -1 } });
+          const healed = healRaw(attacker, POTION_HEAL);
+          gainEnergy(attacker, 10);
+          result = { logs: [`🧪 **${attacker.name}** drank a Health Potion and restored **${healed}** HP! (${attacker.potions} left)`] };
+        }
 
         if (result && result.failed) {
           await interaction.reply({ content: result.logs.join('\n'), ephemeral: true });

@@ -10,6 +10,7 @@ const {
 } = require('discord.js');
 const Fighter = require('../models/Fighter');
 const { BASE_STYLES: STYLES } = require('../utils/classData');
+const { starterMoves, describeMove } = require('../utils/moves');
 
 module.exports = {
   name: 'create',
@@ -270,6 +271,25 @@ module.exports = {
           else if (btn.customId === 'finish') {
             finished = true;
 
+            // Starter-move pick: choose 1 of 3 weak moves
+            const starters = starterMoves(selectedStyleKey);
+            const starterEmbed = new EmbedBuilder()
+              .setTitle('🥋 Choose Your Starting Move')
+              .setDescription(`**${customName}** the **${baseStyle.name}** — pick one starter move to begin with.\nYou'll unlock more by leveling up (\`,moves\`) or buying them (\`,moveshop\`).`)
+              .setColor('#9B59B6');
+            starters.forEach(m => starterEmbed.addFields({ name: m.name, value: describeMove(m), inline: true }));
+            const starterRow = new ActionRowBuilder().addComponents(
+              starters.map(m => new ButtonBuilder().setCustomId(`starter_${m.id}`).setLabel(m.name).setStyle(ButtonStyle.Primary))
+            );
+            await btn.update({ embeds: [starterEmbed], components: [starterRow] });
+
+            const starterChoice = await mainMsg.awaitMessageComponent({
+              filter: (i) => i.user.id === message.author.id && i.customId.startsWith('starter_'),
+              time: 60000
+            }).catch(() => null);
+            const chosenStarter = starterChoice ? starterChoice.customId.replace('starter_', '') : starters[0].id;
+            const starterMove = starters.find(m => m.id === chosenStarter) || starters[0];
+
             const avatarUrl = message.author.displayAvatarURL({ extension: 'png', size: 256 });
             const created = await Fighter.create({
               userId: message.author.id,
@@ -287,8 +307,8 @@ module.exports = {
               imageUrl: avatarUrl,
               wins: 0,
               losses: 0,
-              unlockedMoves: [],
-              loadout: [`${selectedStyleKey}_0`]
+              unlockedMoves: [chosenStarter],
+              loadout: [chosenStarter]
             });
 
             const finalEmbed = new EmbedBuilder()
@@ -298,11 +318,14 @@ module.exports = {
               .addFields(
                 { name: '❤️ HP', value: `${created.hp}`, inline: true },
                 { name: '⚔️ ATK / 🛡️ DEF', value: `${created.attack} / ${created.defense}`, inline: true },
-                { name: '🎯 Starter Kit', value: 'You start with a basic Attack, Block, and one starter move. Unlock more by leveling up (`,moves`) or buying them (`,moveshop`).', inline: false }
+                { name: '🎯 Starter Move', value: `**${starterMove.name}** — ${describeMove(starterMove)}\nYou also have basic Attack & Block. Unlock more via \`,moves\` and \`,moveshop\`.`, inline: false }
               )
               .setColor('#2ECC71');
 
-            return await btn.update({ embeds: [finalEmbed], components: [] });
+            const responder = starterChoice || btn;
+            return responder === btn
+              ? await mainMsg.edit({ embeds: [finalEmbed], components: [] })
+              : await responder.update({ embeds: [finalEmbed], components: [] });
           }
 
           await btn.update({ embeds: [renderAllocationEmbed()], components: [renderButtons()] });

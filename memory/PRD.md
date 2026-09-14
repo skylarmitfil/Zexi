@@ -16,8 +16,9 @@ Prefix commands (default `,`). Entry: `index.js` → `commandHandler.js` loads `
 - `utils/combat.js` — engine: passives, energy, status effects (poison/bleed/stun/shield/regen/
   attack_up/**attack_down (weaken)**/evasion), `performAttack`, `performGuard` (Block = no damage),
   `performSpecial` (signature), and generic `performMove(attacker, defender, move)`.
-- `utils/moves.js` — 33 moves per class (1 starter + 16 level-unlock + signature + 15 shop),
-  themed names (adjective×root), shared balanced templates, unlock/loadout helpers.
+- `utils/moves.js` — 33 moves per class (3 pickable weak starters + 15 level-unlock + signature
+  + 14 shop), themed names (adjective×root), shared balanced templates, unlock/loadout helpers.
+  Players pick 1 of 3 starter moves during `,create`; only the chosen one is unlocked.
 
 ## Implemented (2026-06)
 - Fixed bot-wide crash (`commands.find` on a Map) + global crash-guard.

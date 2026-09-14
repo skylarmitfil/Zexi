@@ -39,11 +39,17 @@ const SHOP_TIERS = [3, 5, 6, 8, 9, 11, 13, 15, 17, 19, 22, 25, 28, 31, 35];
 
 // Build the stat template for move index i (0..31).
 function makeTemplate(i) {
+  // Indices 0-2 are the weak, pickable starter moves.
+  if (i < 3) {
+    const t = { power: +(0.80 + i * 0.06).toFixed(2), hits: 1, energyCost: 0, defIgnorePct: 0 };
+    if (i === 1) t.defIgnorePct = 0.25;        // a light armor-piercing jab
+    if (i === 2) t.lifestealPct = 0.15;        // a small draining blow
+    return t;
+  }
   const power = +(0.85 + i * 0.055).toFixed(2);
-  const energyCost = i === 0 ? 0 : Math.min(95, Math.round(8 + i * 2.6));
+  const energyCost = Math.min(95, Math.round(8 + i * 2.6));
   const t = { power, hits: 1, energyCost, defIgnorePct: 0 };
   const kind = i % 10;
-  if (i === 0) { t.power = 0.85; t.energyCost = 0; return t; }
   switch (kind) {
     case 0: t.lifestealPct = 0.3; break;
     case 2: t.status = { type: 'bleed', duration: 3 }; break;
@@ -73,8 +79,8 @@ function buildClassMoves(classKey) {
     const tpl = makeTemplate(i);
     const move = { id: `${classKey}_${i}`, index: i, classKey, name, ...tpl };
 
-    if (i === 0) {
-      move.unlock = { method: 'start', level: 1, cost: 0 };
+    if (i < 3) {
+      move.unlock = { method: 'starter', level: 1, cost: 0 };
     } else if (i % 2 === 1) {
       move.unlock = { method: 'level', level: LEVEL_TIERS[levelRank] || 40, cost: 0 };
       levelRank++;
@@ -114,14 +120,17 @@ function getMoveById(id) {
   return (POOLS[key] || []).find(m => m.id === id) || null;
 }
 
-// A move is unlocked if: starter, level-req met, signature (lvl>=req), or purchased (shop).
+// A move is unlocked if: chosen starter, level-req met, signature (lvl>=req), or purchased (shop).
 function isUnlocked(fighter, move) {
   const u = move.unlock;
-  if (u.method === 'start') return true;
+  if (u.method === 'starter') return Array.isArray(fighter.unlockedMoves) && fighter.unlockedMoves.includes(move.id);
   if (u.method === 'level') return (fighter.level || 1) >= u.level;
   if (u.method === 'shop') return Array.isArray(fighter.unlockedMoves) && fighter.unlockedMoves.includes(move.id);
   return false;
 }
+
+// The 3 weak, pick-one starter moves for a class.
+function starterMoves(style) { return getClassMoves(style).filter(m => m.unlock.method === 'starter'); }
 
 function unlockedMoves(fighter) { return getClassMoves(fighter.fightingStyle).filter(m => isUnlocked(fighter, m)); }
 function lockedMoves(fighter) { return getClassMoves(fighter.fightingStyle).filter(m => !isUnlocked(fighter, m)); }
@@ -149,5 +158,5 @@ const LOADOUT_SIZE = 5;
 
 module.exports = {
   getClassMoves, getMoveById, isUnlocked, unlockedMoves, lockedMoves,
-  purchasableMoves, describeMove, signatureName, LOADOUT_SIZE, POOLS
+  purchasableMoves, starterMoves, describeMove, signatureName, LOADOUT_SIZE, POOLS
 };

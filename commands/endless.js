@@ -52,7 +52,7 @@ module.exports = {
     // ---- Lobby ----
     const lobbyEmbed = () => new EmbedBuilder()
       .setTitle('♾️ Endless Mode Lobby')
-      .setDescription(`Survive endless waves that grow tougher each round!\n**Host:** <@${message.author.id}>\n\n**Party (${party.size}/4):**\n${Array.from(party.values()).map(p => `• **${p.name}** (${p.style}) — ${p.maxHp} HP`).join('\n')}\n\n⚠️ **Win to keep your rewards.** If the party wipes or quits mid-fight, you lose all loot and **half** your pending XP.`)
+      .setDescription(`Survive endless waves that grow tougher each round!\n**Host:** <@${message.author.id}>\n\n**Party (${party.size}/4):**\n${Array.from(party.values()).map(p => `• **${p.name}** (${p.style}) — ${p.maxHp} HP`).join('\n')}\n\nℹ️ Bank rewards anytime after clearing a wave. If the party **wipes**, you still keep everything earned — but pressing **End Run** forfeits (loot lost, XP halved).`)
       .setColor('#8E44AD')
       .setFooter({ text: 'Click Join, then the host clicks Start.' });
     const lobbyRow = new ActionRowBuilder().addComponents(
@@ -94,16 +94,16 @@ async function startRun(message, mainMsg, party) {
     }
   }
 
-  async function settle(won) {
+  async function settle(penalized) {
     const lines = [];
     for (const p of party) {
       const f = await Fighter.findById(p._id);
       if (!f) continue;
-      const xpGain = won ? p.runXp : Math.floor(p.runXp / 2);
+      const xpGain = penalized ? Math.floor(p.runXp / 2) : p.runXp;
       const leveled = combat.applyXpAndLevel(f, xpGain);
       if (wavesCleared > (f.bestWave || 0)) f.bestWave = wavesCleared;
       let lootTxt = '';
-      if (won && p.runLoot.length) {
+      if (!penalized && p.runLoot.length) {
         let inv = await Inventory.findOne({ userId: p.userId });
         if (!inv) inv = await Inventory.create({ userId: p.userId });
         for (const item of p.runLoot) {
@@ -113,18 +113,25 @@ async function startRun(message, mainMsg, party) {
         await inv.save();
       }
       await f.save();
-      const lootNote = won ? (lootTxt || (p.runLoot.length ? ' (loot already owned)' : '')) : (p.runLoot.length ? ' · 💥 loot forfeited' : '');
-      lines.push(`• <@${p.userId}> **${f.name}**: ${won ? `+${xpGain} XP` : `+${xpGain} XP (½ — forfeited!)`}${lootNote}${leveled ? ` ⬆️Lvl ${f.level}` : ''}`);
+      const lootNote = penalized
+        ? (p.runLoot.length ? ' · 💥 loot forfeited' : '')
+        : (lootTxt || (p.runLoot.length ? ' (loot already owned)' : ''));
+      lines.push(`• <@${p.userId}> **${f.name}**: ${penalized ? `+${xpGain} XP (½ — forfeited!)` : `+${xpGain} XP`}${lootNote}${leveled ? ` ⬆️Lvl ${f.level}` : ''}`);
     }
     return lines.join('\n');
   }
 
-  async function finish(won) {
-    const rewardLines = await settle(won);
+  async function finish(reason) {
+    const penalized = reason === 'forfeit';
+    const rewardLines = await settle(penalized);
+    let title, note, color;
+    if (reason === 'bank') { title = '🏁 Run Banked!'; note = '✅ Rewards secured!'; color = '#2ECC71'; }
+    else if (reason === 'forfeit') { title = '🏳️ Run Forfeited'; note = '💥 You used End Run — loot lost and XP halved.'; color = '#E67E22'; }
+    else { title = '💀 Party Wiped'; note = 'Your party fell — but you keep all the XP and loot you earned!'; color = '#E74C3C'; }
     const embed = new EmbedBuilder()
-      .setTitle(won ? '🏁 Run Banked!' : '💀 Party Wiped — Rewards Forfeited')
-      .setDescription(`**Waves cleared: ${wavesCleared}**\n\n${rewardLines || '_No rewards._'}\n\n${won ? '✅ Rewards secured!' : '💥 Loot lost and XP halved. Win next time to keep it all!'}`)
-      .setColor(won ? '#2ECC71' : '#E74C3C');
+      .setTitle(title)
+      .setDescription(`**Waves cleared: ${wavesCleared}**\n\n${rewardLines || '_No rewards._'}\n\n${note}`)
+      .setColor(color);
     await mainMsg.edit({ content: '', embeds: [embed], components: [] }).catch(() => {});
   }
 
@@ -250,9 +257,9 @@ async function startRun(message, mainMsg, party) {
     const enemy = spawnEnemy(party, wave);
     const outcome = await playWave(enemy);
 
-    if (outcome === 'timeout') { return finish(false); }
-    if (outcome === 'wipe') { return finish(false); }
-    if (outcome === 'forfeit') { return finish(false); }
+    if (outcome === 'timeout') { return finish('timeout'); }
+    if (outcome === 'wipe') { return finish('wipe'); }
+    if (outcome === 'forfeit') { return finish('forfeit'); }
 
     // Wave cleared → accumulate pending rewards (XP + loot in-memory; gold banked immediately)
     wavesCleared = wave;
@@ -271,7 +278,7 @@ async function startRun(message, mainMsg, party) {
     const pendXp = party.map(p => `<@${p.userId}>: ${p.runXp} XP`).join(' · ');
     const contEmbed = new EmbedBuilder()
       .setTitle(`✅ Wave ${wave} Cleared!`)
-      .setDescription(`The party defeated **${enemy.name}**! (+${goldThisWave} gold each)\n\n**Pending XP** — ${pendXp}\n\n⚠️ Press **Stop & Bank** to keep everything. If you push on and the party **wipes**, you lose all loot and **half** your pending XP!`)
+      .setDescription(`The party defeated **${enemy.name}**! (+${goldThisWave} gold each)\n\n**Pending XP** — ${pendXp}\n\n✅ **Stop & Bank** to keep everything. Push on and if you **wipe** you still keep your rewards — only pressing **End Run** mid-fight forfeits (loot lost, XP halved).`)
       .setColor('#2ECC71')
       .setFooter({ text: 'Host chooses. Survivors heal 30% before the next wave.' });
     const contRow = new ActionRowBuilder().addComponents(
@@ -282,7 +289,7 @@ async function startRun(message, mainMsg, party) {
 
     const choice = await mainMsg.awaitMessageComponent({ filter: (x) => x.user.id === hostId && x.customId.startsWith('endless_'), time: 60000 }).catch(() => null);
     // Cleared the wave = a win state → banking (or idle timeout) keeps full rewards.
-    if (!choice || choice.customId === 'endless_stop') { if (choice) await choice.deferUpdate().catch(() => {}); return finish(true); }
+    if (!choice || choice.customId === 'endless_stop') { if (choice) await choice.deferUpdate().catch(() => {}); return finish('bank'); }
 
     await choice.deferUpdate().catch(() => {});
     healBetweenWaves();

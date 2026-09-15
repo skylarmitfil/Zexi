@@ -6,7 +6,7 @@ const PREFIX = ',';
 const FIGHT_COMMANDS = [
   { name: 'pvp', usage: ',pvp @user', desc: 'Challenge another player to a turn-based duel.' },
   { name: 'story', usage: ',story', desc: 'Solo PvE — battle AI foes (Small/Medium/Boss) for XP & gold.' },
-  { name: 'endless', usage: ',endless', desc: 'Co-op wave survival (up to 4). Win to bank rewards — wiping/quitting loses loot & half XP.' },
+  { name: 'endless', usage: ',endless', desc: 'Co-op wave survival (up to 4). Wipe or bank keeps rewards; only End Run forfeits (loot lost, half XP).' },
   { name: 'raid', usage: ',raid', desc: 'Team up (party of 4) to fight a rotating raid boss for loot.' },
   { name: 'moves', usage: ',moves', desc: 'View unlocked attacks and equip your battle loadout (up to 5).' },
   { name: 'moveshop', usage: ',moveshop', desc: 'Buy new attacks with gold (level requirements apply).' },

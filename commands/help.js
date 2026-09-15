@@ -11,7 +11,7 @@ const FIGHT_COMMANDS = [
   { name: 'moves', usage: ',moves', desc: 'View unlocked attacks and equip your battle loadout (up to 5).' },
   { name: 'moveshop', usage: ',moveshop', desc: 'Buy new attacks with gold (level requirements apply).' },
   { name: 'customize', usage: ',customize', desc: 'View your fighter, spend stat points, passive & loadout.' },
-  { name: 'leaderboard', usage: ',leaderboard [wins|streak|gold]', desc: 'See the top fighters.' }
+  { name: 'leaderboard', usage: ',leaderboard [wins|streak|gold|wave]', desc: 'See the top fighters (wave = Endless rankings).' }
 ];
 
 module.exports = {

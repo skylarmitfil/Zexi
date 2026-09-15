@@ -169,6 +169,9 @@ async function startRun(message, mainMsg, party) {
             .setCustomId('e_move').setPlaceholder(`${active.name}'s Moves`)
             .addOptions(moves.slice(0, 25).map(m => ({ label: `${m.name}${m.energyCost ? ` (${m.energyCost}⚡)` : ''}`.slice(0, 100), value: m.id, description: (m.power ? m.power.toFixed(2) + 'x ATK' : 'utility').slice(0, 100) })))));
         }
+        rows.push(new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId('e_end').setLabel('End Run (Host)').setEmoji('🏳️').setStyle(ButtonStyle.Secondary)
+        ));
         return { content: '', embeds: [embed], components: rows };
       }
 
@@ -194,6 +197,10 @@ async function startRun(message, mainMsg, party) {
       const col = mainMsg.createMessageComponentCollector({ time: 300000 });
 
       col.on('collect', async (i) => {
+        if (i.customId === 'e_end') {
+          if (i.user.id !== hostId) return i.reply({ content: 'Only the host can end the run.', ephemeral: true });
+          done = true; col.stop('end'); await i.deferUpdate().catch(() => {}); return resolve('forfeit');
+        }
         const active = getActive();
         if (i.user.id !== active.userId) return i.reply({ content: `It's <@${active.userId}>'s turn.`, ephemeral: true });
 
@@ -245,6 +252,7 @@ async function startRun(message, mainMsg, party) {
 
     if (outcome === 'timeout') { return finish(false); }
     if (outcome === 'wipe') { return finish(false); }
+    if (outcome === 'forfeit') { return finish(false); }
 
     // Wave cleared → accumulate pending rewards (XP + loot in-memory; gold banked immediately)
     wavesCleared = wave;

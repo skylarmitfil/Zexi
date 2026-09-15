@@ -50,6 +50,16 @@ Prefix commands (default `,`). Entry: `index.js` → `commandHandler.js` loads `
   balance tournaments (1000+ games/pair); move-based duel simulation. Live Discord button/menu
   flows require the deployed bot + DISCORD_TOKEN (Railway).
 
+## Update — 2026-06 (Potion crash hardening)
+- Investigated user-reported live "Error" after the shop/potion expansion. All shop/potion
+  files pass `node --check`; headless sim of shop-buy + tiered-potion drink runs clean; all
+  16 commands load. Could NOT reproduce the exact crash without the Railway stack trace.
+- Hardened the one genuinely crash-prone new path: drinking a potion when `bestPotion()`
+  returns `null` (potion-bag/counter desync) previously threw `TypeError: best.field`.
+  Added a null-guard in `pvp.js`, `story.js`, `raid.js`, `endless.js` → resets the counter
+  and replies "no potions" instead of crashing the interaction.
+- Added regression sim `tests/sim_shop_potion.js`.
+
 ## Backlog / Next
 - P1: Equipment stat bonuses (weapon/armor from raid loot) reflected in combat.
 - P1: Boss move telegraph (show next boss action).

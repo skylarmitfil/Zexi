@@ -288,6 +288,7 @@ async function startCoopBattle(message, party, boss, mainMsg) {
         actionLines.push(`✨ **${currentPlayer.name}** healed all living party members for **25 HP**!`);
       } else if (i.customId === 'raid_potion') {
         const best = bestPotion(currentPlayer.potionBag);
+        if (!best) { currentPlayer.potions = 0; return i.reply({ content: '⚠️ You have no Health Potions! Buy some with `,shop`.', ephemeral: true }); }
         currentPlayer.potionBag[best.field] -= 1; currentPlayer.potions -= 1;
         await Inventory.updateOne({ userId: currentPlayer.userId }, { $inc: { [best.field]: -1 } });
         const healed = healRaw(currentPlayer, best.heal);

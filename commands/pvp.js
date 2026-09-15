@@ -215,6 +215,7 @@ module.exports = {
         else if (interaction.isButton() && interaction.customId === 'btn_guard') result = performGuard(attacker);
         else if (interaction.isButton() && interaction.customId === 'btn_potion') {
           const best = bestPotion(attacker.potionBag);
+          if (!best) { attacker.potions = 0; await interaction.reply({ content: '⚠️ You have no Health Potions! Buy some with `,shop`.', ephemeral: true }); continue; }
           attacker.potionBag[best.field] -= 1; attacker.potions -= 1;
           await Inventory.updateOne({ userId: attacker.userId }, { $inc: { [best.field]: -1 } });
           const healed = healRaw(attacker, best.heal); gainEnergy(attacker, 10);

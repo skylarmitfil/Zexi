@@ -256,6 +256,7 @@ module.exports = {
           else if (i.isButton() && i.customId === 's_guard') r = performGuard(player);
           else if (i.isButton() && i.customId === 's_potion') {
             const best = bestPotion(player.potionBag);
+            if (!best) { player.potions = 0; await i.reply({ content: '⚠️ No Health Potions! Buy some with `,shop`.', ephemeral: true }); continue; }
             player.potionBag[best.field] -= 1; player.potions -= 1;
             await Inventory.updateOne({ userId: message.author.id }, { $inc: { [best.field]: -1 } });
             const h = healRaw(player, best.heal); gainEnergy(player, 10);

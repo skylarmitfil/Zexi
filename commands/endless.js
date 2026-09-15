@@ -228,7 +228,7 @@ async function startRun(message, mainMsg, party) {
           else if (i.customId === 'e_special') { const r = combat.performSpecial(active, enemy); if (r.failed) return i.reply({ content: r.logs.join('\n'), ephemeral: true }); lines.push(...r.logs); }
           else if (move) { const r = combat.performMove(active, enemy, move); if (r.failed) return i.reply({ content: r.logs.join('\n'), ephemeral: true }); lines.push(...r.logs); }
           else if (i.customId === 'e_heal') { party.forEach(p => { if (p.isAlive) combat.healRaw(p, 25); }); active.energy = Math.min(100, active.energy + 15); lines.push(`✨ **${active.name}** healed the party for 25 HP!`); }
-          else if (i.customId === 'e_potion') { const best = bestPotion(active.potionBag); active.potionBag[best.field] -= 1; active.potions -= 1; await Inventory.updateOne({ userId: active.userId }, { $inc: { [best.field]: -1 } }); const h = combat.healRaw(active, best.heal); combat.gainEnergy(active, 10); lines.push(`🧪 **${active.name}** drank a **${best.name}** (+${h} HP, ${active.potions} left).`); }
+          else if (i.customId === 'e_potion') { const best = bestPotion(active.potionBag); if (!best) { active.potions = 0; return i.reply({ content: '⚠️ No potions! Buy with `,shop`.', ephemeral: true }); } active.potionBag[best.field] -= 1; active.potions -= 1; await Inventory.updateOne({ userId: active.userId }, { $inc: { [best.field]: -1 } }); const h = combat.healRaw(active, best.heal); combat.gainEnergy(active, 10); lines.push(`🧪 **${active.name}** drank a **${best.name}** (+${h} HP, ${active.potions} left).`); }
           else if (i.customId === 'e_guard') lines.push(...combat.performGuard(active).logs);
         }
 

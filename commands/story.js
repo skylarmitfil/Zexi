@@ -31,6 +31,9 @@ const TIERS = {
   boss: { label: 'Boss Fight', hpMul: 1.8, atkMul: 1.15, defMul: 1.1, lvlAdd: 4, gold: [60, 100], xp: () => 25, color: '#C0392B' }
 };
 
+const WEAPON_LOOT = ['Iron Sword', 'Flame Blade', 'Dragon Fang', 'Shadow Dagger'];
+const ARMOR_LOOT = ['Steel Armor', 'Dragonscale Mail', 'Aegis Plate'];
+
 function resolveLoadout(doc) {
   const pool = getClassMoves(doc.fightingStyle);
   let moves = (doc.loadout || []).map(id => pool.find(m => m.id === id)).filter(Boolean);
@@ -45,7 +48,7 @@ function difficultyPrompt(playerDoc) {
     .addFields(
       { name: '🟢 Small Skirmish', value: 'Weaker foe · **5–10 XP**', inline: true },
       { name: '🟠 Medium Battle', value: 'Even match · **11–20 XP**', inline: true },
-      { name: '🔴 Boss Fight', value: 'Powerful boss · **25 XP**', inline: true }
+      { name: '🔴 Boss Fight', value: 'Powerful boss · **25 XP** + loot', inline: true }
     )
     .setColor('#9B59B6');
   const row = new ActionRowBuilder().addComponents(
@@ -83,6 +86,7 @@ module.exports = {
     // Encounter state (rebuilt each fight)
     let currentTier = firstDiff.customId.replace('diff_', '');
     let starterInteraction = firstDiff;
+    let wave = 1;
     let player, enemy, tier, turn, log;
 
     function buildUI() {
@@ -131,7 +135,24 @@ module.exports = {
 
     async function setupEncounter() {
       playerDoc = await Fighter.findById(playerDoc._id) || playerDoc;
-      tier = TIERS[currentTier];
+      const isBossWave = currentTier === 'endless' && wave % 5 === 0;
+      if (currentTier === 'endless') {
+        const scale = 1 + (wave - 1) * 0.12;
+        tier = {
+          label: `♾️ Endless — Wave ${wave}${isBossWave ? ' (BOSS)' : ''}`,
+          hpMul: (isBossWave ? 1.6 : 1.0) * scale,
+          atkMul: (isBossWave ? 1.1 : 0.95) * scale,
+          defMul: 0.95,
+          lvlAdd: Math.floor(wave / 2),
+          gold: [15 + wave * 3, 30 + wave * 4],
+          xp: () => Math.min(30, 6 + wave * 2),
+          color: '#8E44AD',
+          boss: isBossWave
+        };
+      } else {
+        tier = TIERS[currentTier];
+      }
+
       player = createCombatant(playerDoc);
       player.moves = resolveLoadout(playerDoc);
       const inv = await Inventory.findOne({ userId: message.author.id });
@@ -139,14 +160,33 @@ module.exports = {
 
       const keys = Object.keys(BASE_STYLES);
       const ec = BASE_STYLES[keys[rnd(0, keys.length - 1)]];
-      const name = ENEMY_NAMES[currentTier][rnd(0, ENEMY_NAMES[currentTier].length - 1)];
+      const nameTier = currentTier === 'endless' ? (isBossWave ? 'boss' : 'medium') : currentTier;
+      const name = ENEMY_NAMES[nameTier][rnd(0, ENEMY_NAMES[nameTier].length - 1)];
       const hp = Math.max(40, Math.round(player.maxHp * tier.hpMul));
       enemy = createCombatant({
         userId: 'ENEMY', name, fightingStyle: ec.name, level: playerDoc.level + tier.lvlAdd,
         hp, maxHp: hp, attack: Math.max(8, Math.round(player.attack * tier.atkMul)), defense: Math.max(0, Math.round(player.defense * tier.defMul))
       });
       turn = 1;
-      log = `A wild **${enemy.name}** (${enemy.style}) appears! Fight!`;
+      log = currentTier === 'endless'
+        ? `**Wave ${wave}!** A **${enemy.name}** (${enemy.style}) blocks your path!`
+        : `A wild **${enemy.name}** (${enemy.style}) appears! Fight!`;
+    }
+
+    async function rollLoot(userId) {
+      let inv = await Inventory.findOne({ userId });
+      if (!inv) inv = await Inventory.create({ userId });
+      let txt = '';
+      if (Math.random() < 0.30) {
+        const w = WEAPON_LOOT[rnd(0, WEAPON_LOOT.length - 1)];
+        if (!inv.weaponsOwned.includes(w)) { inv.weaponsOwned.push(w); txt += ` ⚔️ ${w}`; }
+      }
+      if (Math.random() < 0.15) {
+        const a = ARMOR_LOOT[rnd(0, ARMOR_LOOT.length - 1)];
+        if (!inv.armorOwned.includes(a)) { inv.armorOwned.push(a); txt += ` 🛡️ ${a}`; }
+      }
+      if (txt) await inv.save();
+      return txt;
     }
 
     async function applyRewards() {
@@ -157,9 +197,22 @@ module.exports = {
       fresh.balance += gold;
       const atMax = fresh.level >= MAX_LEVEL;
       const leveled = applyXpAndLevel(fresh, xp);
+
+      let txt = `🎁 **+${xp} XP** & **+${gold} gold**!`;
+
+      // Endless: record best wave cleared
+      if (currentTier === 'endless') {
+        if (wave > (fresh.bestWave || 0)) fresh.bestWave = wave;
+        txt += `\n🌊 **Wave ${wave} cleared!** Best: **Wave ${fresh.bestWave}**`;
+      }
+      // Boss loot: Boss tier, or endless boss waves
+      if (currentTier === 'boss' || (currentTier === 'endless' && tier.boss)) {
+        const loot = await rollLoot(message.author.id);
+        if (loot) txt += `\n💎 **Loot dropped:**${loot}`;
+      }
+
       await fresh.save();
       playerDoc = fresh;
-      let txt = `🎁 **+${xp} XP** & **+${gold} gold**!`;
       if (leveled) txt += `\n⬆️ **${fresh.name}** reached **Level ${fresh.level}**! (+${leveled * 2} stat points)`;
       else if (atMax) txt += `\n🏆 **${fresh.name}** is at the max level (${MAX_LEVEL})!`;
       txt += `\n📊 ${xpProgress(fresh)}`;
@@ -229,15 +282,21 @@ module.exports = {
       // Win / lose result + Continue controls
       const won = outcome === 'win';
       const reward = won ? await applyRewards() : '';
+      const endlessNote = currentTier === 'endless'
+        ? (won ? '' : `\n🌊 You reached **Wave ${wave}**. Best: **Wave ${playerDoc.bestWave || 0}**`)
+        : '';
       const resultEmbed = new EmbedBuilder()
         .setTitle(won ? '🏆 Victory!' : '💀 Defeat')
         .setDescription(won
           ? `You defeated **${enemy.name}**!\n\n📜 ${log}\n\n${reward}`
-          : `**${enemy.name}** bested you.\n\n📜 ${log}\n\nHeal up and try again!`)
+          : `**${enemy.name}** bested you.\n\n📜 ${log}${endlessNote}\n\nHeal up and try again!`)
         .setColor(won ? '#2ECC71' : '#E74C3C');
 
+      const continueLabel = currentTier === 'endless'
+        ? (won ? `Next Wave (${wave + 1})` : 'Restart Run')
+        : (won ? 'Continue' : 'Fight Again');
       const controls = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('story_continue').setLabel(won ? 'Continue' : 'Fight Again').setEmoji('⚔️').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('story_continue').setLabel(continueLabel).setEmoji('⚔️').setStyle(ButtonStyle.Success),
         new ButtonBuilder().setCustomId('story_change').setLabel('Change Difficulty').setEmoji('🔀').setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId('story_stop').setLabel('Stop').setEmoji('🛑').setStyle(ButtonStyle.Secondary)
       );
@@ -246,20 +305,23 @@ module.exports = {
       const next = await battleMsg.awaitMessageComponent({ filter: (x) => x.user.id === message.author.id && x.customId.startsWith('story_'), time: 60000 }).catch(() => null);
       if (!next || next.customId === 'story_stop') {
         keepPlaying = false;
-        const bye = new EmbedBuilder().setTitle('🗺️ Adventure Paused').setDescription(`Come back anytime with \`,story\`.\n📊 ${xpProgress(playerDoc)}`).setColor('#95A5A6');
+        const summary = currentTier === 'endless' ? `\n🌊 Best: **Wave ${playerDoc.bestWave || 0}**` : '';
+        const bye = new EmbedBuilder().setTitle('🗺️ Adventure Paused').setDescription(`Come back anytime with \`,story\`.\n📊 ${xpProgress(playerDoc)}${summary}`).setColor('#95A5A6');
         if (next) await next.update({ embeds: [bye], components: [] }).catch(() => {});
         else await battleMsg.edit({ embeds: [bye], components: [] }).catch(() => {});
         break;
       }
 
       if (next.customId === 'story_change') {
+        wave = 1;
         await next.update(difficultyPrompt(playerDoc));
         const dc = await battleMsg.awaitMessageComponent({ filter: i => i.user.id === message.author.id && i.customId.startsWith('diff_'), time: 30000 }).catch(() => null);
         if (!dc) { await battleMsg.edit({ content: '⏱️ No encounter chosen.', components: [] }).catch(() => {}); return; }
         currentTier = dc.customId.replace('diff_', '');
         starterInteraction = dc;
       } else {
-        // Continue on the same difficulty
+        // Continue: advance the wave on an endless win, restart the run on an endless loss
+        if (currentTier === 'endless') wave = won ? wave + 1 : 1;
         starterInteraction = next;
       }
     }

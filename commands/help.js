@@ -6,6 +6,7 @@ const PREFIX = ',';
 const FIGHT_COMMANDS = [
   { name: 'pvp', usage: ',pvp @user', desc: 'Challenge another player to a turn-based duel.' },
   { name: 'story', usage: ',story', desc: 'Solo PvE — battle AI foes (Small/Medium/Boss) for XP & gold.' },
+  { name: 'endless', usage: ',endless', desc: 'Co-op wave survival (up to 4). Win to bank rewards — wiping/quitting loses loot & half XP.' },
   { name: 'raid', usage: ',raid', desc: 'Team up (party of 4) to fight a rotating raid boss for loot.' },
   { name: 'moves', usage: ',moves', desc: 'View unlocked attacks and equip your battle loadout (up to 5).' },
   { name: 'moveshop', usage: ',moveshop', desc: 'Buy new attacks with gold (level requirements apply).' },
@@ -79,7 +80,7 @@ module.exports = {
       .setColor('#9B59B6')
       .setDescription(`Prefix: \`${PREFIX}\`\nUse **\`,help fight\`** for the full combat guide, or \`,help <command>\` for a specific command.`)
       .addFields(
-        { name: '⚔️ Fighting', value: '`pvp` · `story` · `raid` · `moves` · `moveshop`', inline: false },
+        { name: '⚔️ Fighting', value: '`pvp` · `story` · `endless` · `raid` · `moves` · `moveshop`', inline: false },
         { name: '🧙 Character', value: '`create` · `customize` · `resetstats` · `leaderboard`', inline: false },
         { name: '💰 Economy', value: '`balance` · `shop` · `inventory`', inline: false },
         { name: '🛡️ Moderation', value: '`nuke`', inline: false },

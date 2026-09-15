@@ -25,6 +25,7 @@ const {
   applyXpAndLevel
 } = require('../utils/combat');
 const { getClassMoves } = require('../utils/moves');
+const { loadPotions, totalPotions, bestPotion } = require('../utils/potions');
 const { StringSelectMenuBuilder } = require('discord.js');
 
 const POTION_HEAL = 30;
@@ -102,7 +103,7 @@ module.exports = {
 
     const party = new Map();
     const leaderInv = await Inventory.findOne({ userId: message.author.id });
-    party.set(message.author.id, createCombatant(leaderFighter, { potions: leaderInv ? leaderInv.potions : 0, moves: resolveLoadout(leaderFighter) }));
+    party.set(message.author.id, createCombatant(leaderFighter, { potions: totalPotions(loadPotions(leaderInv)), potionBag: loadPotions(leaderInv), moves: resolveLoadout(leaderFighter) }));
 
     function renderLobbyEmbed() {
       const partyList = Array.from(party.values())
@@ -131,7 +132,7 @@ module.exports = {
         const memberDoc = await Fighter.findOne({ userId: i.user.id });
         if (!memberDoc) return i.reply({ content: 'You need a character to join! Type `,create` first.', ephemeral: true });
         const memberInv = await Inventory.findOne({ userId: i.user.id });
-        party.set(i.user.id, createCombatant(memberDoc, { potions: memberInv ? memberInv.potions : 0, moves: resolveLoadout(memberDoc) }));
+        party.set(i.user.id, createCombatant(memberDoc, { potions: totalPotions(loadPotions(memberInv)), potionBag: loadPotions(memberInv), moves: resolveLoadout(memberDoc) }));
         await i.update({ embeds: [renderLobbyEmbed()], components: [lobbyRow] });
       }
 
@@ -286,11 +287,12 @@ async function startCoopBattle(message, party, boss, mainMsg) {
         currentPlayer.energy = Math.min(currentPlayer.maxEnergy, currentPlayer.energy + 15);
         actionLines.push(`✨ **${currentPlayer.name}** healed all living party members for **25 HP**!`);
       } else if (i.customId === 'raid_potion') {
-        currentPlayer.potions -= 1;
-        await Inventory.updateOne({ userId: currentPlayer.userId }, { $inc: { potions: -1 } });
-        const healed = healRaw(currentPlayer, POTION_HEAL);
+        const best = bestPotion(currentPlayer.potionBag);
+        currentPlayer.potionBag[best.field] -= 1; currentPlayer.potions -= 1;
+        await Inventory.updateOne({ userId: currentPlayer.userId }, { $inc: { [best.field]: -1 } });
+        const healed = healRaw(currentPlayer, best.heal);
         gainEnergy(currentPlayer, 10);
-        actionLines.push(`🧪 **${currentPlayer.name}** drank a Health Potion and restored **${healed}** HP! (${currentPlayer.potions} left)`);
+        actionLines.push(`🧪 **${currentPlayer.name}** drank a **${best.name}** and restored **${healed}** HP! (${currentPlayer.potions} left)`);
       } else if (i.customId === 'raid_guard') {
         actionLines.push(...performGuard(currentPlayer).logs);
       }

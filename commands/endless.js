@@ -3,6 +3,7 @@ const Fighter = require('../models/Fighter');
 const Inventory = require('../models/Inventory');
 const combat = require('../utils/combat');
 const { getClassMoves } = require('../utils/moves');
+const { loadPotions, totalPotions, bestPotion } = require('../utils/potions');
 const { BASE_STYLES } = require('../utils/classData');
 
 const POTION_HEAL = 30;
@@ -45,7 +46,7 @@ module.exports = {
     const party = new Map();
     async function addMember(userId, doc) {
       const inv = await Inventory.findOne({ userId });
-      party.set(userId, combat.createCombatant(doc, { moves: resolveLoadout(doc), potions: inv ? inv.potions : 0, runXp: 0, runLoot: [] }));
+      party.set(userId, combat.createCombatant(doc, { moves: resolveLoadout(doc), potions: totalPotions(loadPotions(inv)), potionBag: loadPotions(inv), runXp: 0, runLoot: [] }));
     }
     await addMember(message.author.id, hostFighter);
 
@@ -227,7 +228,7 @@ async function startRun(message, mainMsg, party) {
           else if (i.customId === 'e_special') { const r = combat.performSpecial(active, enemy); if (r.failed) return i.reply({ content: r.logs.join('\n'), ephemeral: true }); lines.push(...r.logs); }
           else if (move) { const r = combat.performMove(active, enemy, move); if (r.failed) return i.reply({ content: r.logs.join('\n'), ephemeral: true }); lines.push(...r.logs); }
           else if (i.customId === 'e_heal') { party.forEach(p => { if (p.isAlive) combat.healRaw(p, 25); }); active.energy = Math.min(100, active.energy + 15); lines.push(`✨ **${active.name}** healed the party for 25 HP!`); }
-          else if (i.customId === 'e_potion') { active.potions -= 1; await Inventory.updateOne({ userId: active.userId }, { $inc: { potions: -1 } }); const h = combat.healRaw(active, POTION_HEAL); combat.gainEnergy(active, 10); lines.push(`🧪 **${active.name}** drank a potion (+${h} HP, ${active.potions} left).`); }
+          else if (i.customId === 'e_potion') { const best = bestPotion(active.potionBag); active.potionBag[best.field] -= 1; active.potions -= 1; await Inventory.updateOne({ userId: active.userId }, { $inc: { [best.field]: -1 } }); const h = combat.healRaw(active, best.heal); combat.gainEnergy(active, 10); lines.push(`🧪 **${active.name}** drank a **${best.name}** (+${h} HP, ${active.potions} left).`); }
           else if (i.customId === 'e_guard') lines.push(...combat.performGuard(active).logs);
         }
 

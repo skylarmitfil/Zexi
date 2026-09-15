@@ -6,6 +6,7 @@ const {
   renderHealthBar, renderEnergyBar, statusSummary, applyXpAndLevel, healRaw, gainEnergy, MAX_LEVEL
 } = require('../utils/combat');
 const { getClassMoves } = require('../utils/moves');
+const { loadPotions, totalPotions, bestPotion } = require('../utils/potions');
 const { BASE_STYLES } = require('../utils/classData');
 
 const POTION_HEAL = 30;
@@ -156,7 +157,7 @@ module.exports = {
       player = createCombatant(playerDoc);
       player.moves = resolveLoadout(playerDoc);
       const inv = await Inventory.findOne({ userId: message.author.id });
-      player.potions = inv ? inv.potions : 0;
+      player.potionBag = loadPotions(inv); player.potions = totalPotions(player.potionBag);
 
       const keys = Object.keys(BASE_STYLES);
       const ec = BASE_STYLES[keys[rnd(0, keys.length - 1)]];
@@ -254,10 +255,11 @@ module.exports = {
           if (i.isButton() && i.customId === 's_attack') r = performAttack(player, enemy);
           else if (i.isButton() && i.customId === 's_guard') r = performGuard(player);
           else if (i.isButton() && i.customId === 's_potion') {
-            player.potions -= 1;
-            await Inventory.updateOne({ userId: message.author.id }, { $inc: { potions: -1 } });
-            const h = healRaw(player, POTION_HEAL); gainEnergy(player, 10);
-            r = { logs: [`🧪 **${player.name}** drank a Potion and restored **${h}** HP! (${player.potions} left)`] };
+            const best = bestPotion(player.potionBag);
+            player.potionBag[best.field] -= 1; player.potions -= 1;
+            await Inventory.updateOne({ userId: message.author.id }, { $inc: { [best.field]: -1 } });
+            const h = healRaw(player, best.heal); gainEnergy(player, 10);
+            r = { logs: [`🧪 **${player.name}** drank a **${best.name}** and restored **${h}** HP! (${player.potions} left)`] };
           } else if (move) {
             r = performMove(player, enemy, move);
             if (r && r.failed) { await i.reply({ content: r.logs.join('\n'), ephemeral: true }); continue; }

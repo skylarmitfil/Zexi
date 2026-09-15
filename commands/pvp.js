@@ -8,6 +8,7 @@ const {
   renderHealthBar, renderEnergyBar, statusSummary, applyXpAndLevel, healRaw, gainEnergy
 } = require('../utils/combat');
 const { getClassMoves } = require('../utils/moves');
+const { loadPotions, totalPotions, bestPotion } = require('../utils/potions');
 
 const POTION_HEAL = 30;
 
@@ -56,8 +57,8 @@ module.exports = {
     fighter2.moves = resolveLoadout(p2Doc);
     const inv1 = await Inventory.findOne({ userId: message.author.id });
     const inv2 = await Inventory.findOne({ userId: opponentUser.id });
-    fighter1.potions = inv1 ? inv1.potions : 0;
-    fighter2.potions = inv2 ? inv2.potions : 0;
+    fighter1.potionBag = loadPotions(inv1); fighter1.potions = totalPotions(fighter1.potionBag);
+    fighter2.potionBag = loadPotions(inv2); fighter2.potions = totalPotions(fighter2.potionBag);
     const class1 = getClass(fighter1.style);
     const class2 = getClass(fighter2.style);
 
@@ -213,10 +214,11 @@ module.exports = {
         if (interaction.isButton() && interaction.customId === 'btn_attack') result = performAttack(attacker, defender);
         else if (interaction.isButton() && interaction.customId === 'btn_guard') result = performGuard(attacker);
         else if (interaction.isButton() && interaction.customId === 'btn_potion') {
-          attacker.potions -= 1;
-          await Inventory.updateOne({ userId: attacker.userId }, { $inc: { potions: -1 } });
-          const healed = healRaw(attacker, POTION_HEAL); gainEnergy(attacker, 10);
-          result = { logs: [`🧪 **${attacker.name}** drank a Health Potion and restored **${healed}** HP! (${attacker.potions} left)`] };
+          const best = bestPotion(attacker.potionBag);
+          attacker.potionBag[best.field] -= 1; attacker.potions -= 1;
+          await Inventory.updateOne({ userId: attacker.userId }, { $inc: { [best.field]: -1 } });
+          const healed = healRaw(attacker, best.heal); gainEnergy(attacker, 10);
+          result = { logs: [`🧪 **${attacker.name}** drank a **${best.name}** and restored **${healed}** HP! (${attacker.potions} left)`] };
         } else if (chosenMove) {
           result = performMove(attacker, defender, chosenMove);
           if (result && result.failed) { await interaction.reply({ content: result.logs.join('\n'), ephemeral: true }); continue; }

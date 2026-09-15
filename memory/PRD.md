@@ -36,6 +36,14 @@ Prefix commands (default `,`). Entry: `index.js` → `commandHandler.js` loads `
     (46%–55%) via simulation. Weaker classes (Guardian/Berserker/Necromancer/Valkyrie) then
     given small buffs. Base stats live in `utils/classData.js`; passives in `utils/combat.js`.
   - Backward compatible: pre-existing characters (empty loadout) fall back to the starter move.
+- **Progression + Story mode (latest):**
+  - **Level cap = 100** (`MAX_LEVEL` in combat.js; XP stops accruing at cap).
+  - **`,moveshop` pagination**: Prev/Next arrows, 6 moves/page (fixes only-seeing-up-to-Lvl-19).
+  - **`,story`** (aliases campaign/adventure/pve): solo PvE vs a scaled AI enemy. Pick
+    Small/Medium/Boss → XP 5-10 / 11-20 / 25 + gold. Full combat engine + loadout; ~44%
+    player win-rate in sim; all battles terminate. Adds `story.js`.
+  - **XP progress display**: story battle footer + victory embed show `xp/(level×50)` bar
+    toward next level (requirement scales with level).
 
 ## Verification
 - `node -c` + command loader on all 12 commands; move pool sizes (33/class) and unlock gating;

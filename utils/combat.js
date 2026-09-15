@@ -334,10 +334,12 @@ function statusSummary(c) {
 }
 
 // ---- Progression ----
+const MAX_LEVEL = 100;
 function applyXpAndLevel(f, xpGain) {
+  if (f.level >= MAX_LEVEL) { f.level = MAX_LEVEL; f.xp = 0; return 0; }
   f.xp = (f.xp || 0) + xpGain;
   let leveled = 0;
-  while (f.xp >= f.level * 50) {
+  while (f.level < MAX_LEVEL && f.xp >= f.level * 50) {
     f.xp -= f.level * 50;
     f.level += 1;
     f.statPoints = (f.statPoints || 0) + 2;
@@ -346,6 +348,7 @@ function applyXpAndLevel(f, xpGain) {
     f.defense += 1;
     leveled++;
   }
+  if (f.level >= MAX_LEVEL) f.xp = 0;
   if (leveled) f.hp = f.maxHp;
   return leveled;
 }
@@ -353,5 +356,5 @@ function applyXpAndLevel(f, xpGain) {
 module.exports = {
   CLASSES, getClass, createCombatant, gainEnergy, addStatus, healRaw, applyDamage,
   tickStatuses, performAttack, performGuard, performSpecial, performMove,
-  renderHealthBar, renderEnergyBar, statusSummary, applyXpAndLevel, effectiveAttack
+  renderHealthBar, renderEnergyBar, statusSummary, applyXpAndLevel, effectiveAttack, MAX_LEVEL
 };

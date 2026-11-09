@@ -10,5 +10,8 @@
     "dotenv": "^16.4.5",
     "mongoose": "^8.2.0",
     "ws": "^8.16.0"
+  },
+  "devDependencies": {
+    "@flydotio/dockerfile": "^0.7.15"
   }
 }
